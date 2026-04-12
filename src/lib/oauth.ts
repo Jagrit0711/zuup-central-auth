@@ -275,6 +275,17 @@ function getParam(params: URLSearchParams, ...names: string[]): string {
   return "";
 }
 
+function normalizeRedirectUri(value: string): string {
+  try {
+    const url = new URL(value);
+    // Ignore query and hash when matching registered callback path.
+    const normalizedPath = url.pathname.replace(/\/+$/, "") || "/";
+    return `${url.origin}${normalizedPath}`;
+  } catch {
+    return value;
+  }
+}
+
 export function validateAuthRequest(params: URLSearchParams): { ok: true; data: ValidatedRequest } | { ok: false; error: string } {
   const client_id = getParam(params, "client_id", "clientId");
   const redirect_uri = getParam(params, "redirect_uri", "redirectUri");
@@ -292,10 +303,22 @@ export function validateAuthRequest(params: URLSearchParams): { ok: true; data: 
   const client = getRegisteredClients()[client_id];
   if (!client) return { ok: false, error: `Unknown client_id: ${client_id}` };
 
-  const isValidRedirect = client.allowed_redirect_uris.some(
-    (uri) => redirect_uri === uri || redirect_uri.startsWith(uri.endsWith("/") ? uri : uri + "/")
-  );
-  if (!isValidRedirect) return { ok: false, error: `redirect_uri not registered for this client` };
+  const normalizedIncoming = normalizeRedirectUri(redirect_uri);
+  const isValidRedirect = client.allowed_redirect_uris.some((registered) => {
+    const normalizedRegistered = normalizeRedirectUri(registered);
+    return (
+      redirect_uri === registered ||
+      redirect_uri.startsWith(registered.endsWith("/") ? registered : registered + "/") ||
+      normalizedIncoming === normalizedRegistered
+    );
+  });
+
+  if (!isValidRedirect) {
+    return {
+      ok: false,
+      error: `redirect_uri not registered for this client. Received: ${redirect_uri}. Allowed: ${client.allowed_redirect_uris.join(" | ")}`,
+    };
+  }
 
   const requestedScopes = scope.split(/\s+/) as OAuthScope[];
   const invalidScopes = requestedScopes.filter((s) => !client.allowed_scopes.includes(s));
