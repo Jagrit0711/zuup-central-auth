@@ -82,7 +82,7 @@ async function loginWithZuup() {
     code_challenge_method: 'S256',
   });
 
-  window.location.href = \`https://auth.zuup.dev/authorize?\${params}\`;
+  window.location.href = \`https://qnapwukqhybziduhzpow.supabase.co/auth/v1/oauth/authorize?\${params}\`;
 }
 
 // 3. Handle callback
@@ -96,7 +96,7 @@ async function handleCallback() {
   }
 
   // Exchange code (do this server-side in production!)
-  const res = await fetch('https://auth.zuup.dev/token', {
+  const res = await fetch('https://qnapwukqhybziduhzpow.supabase.co/auth/v1/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -137,7 +137,7 @@ function LoginButton() {
       code_challenge_method: 'S256',
     });
     
-    window.location.href = \`https://auth.zuup.dev/authorize?\${params}\`;
+    window.location.href = \`https://qnapwukqhybziduhzpow.supabase.co/auth/v1/oauth/authorize?\${params}\`;
   };
 
   return <button onClick={login}>Login with Zuup</button>;
@@ -174,7 +174,7 @@ export async function GET(req: NextRequest) {
   const verifier = req.cookies.get('pkce_verifier')?.value;
   
   // Exchange code for tokens (this IS server-side — safe!)
-  const tokenRes = await fetch('https://auth.zuup.dev/token', {
+  const tokenRes = await fetch('https://qnapwukqhybziduhzpow.supabase.co/auth/v1/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

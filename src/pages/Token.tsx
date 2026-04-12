@@ -14,7 +14,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   consumeAuthCode,
   verifyCodeChallenge,
-  REGISTERED_CLIENTS,
+  getRegisteredClients,
   logAuditEvent,
 } from "@/lib/oauth";
 import { supabase } from "@/lib/supabase";
@@ -81,7 +81,7 @@ export default function TokenEndpoint() {
       }
 
       // Check client exists
-      const client = REGISTERED_CLIENTS[client_id];
+      const client = getRegisteredClients()[client_id];
       if (!client) {
         setResult({ ok: false, error: "invalid_client" });
         return;

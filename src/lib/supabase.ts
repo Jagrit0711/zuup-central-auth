@@ -6,8 +6,8 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export const OAUTH_ENDPOINTS = {
-  authorization: `${window.location.origin}/authorize`,
-  token: `${SUPABASE_URL}/auth/v1/token`,
+  authorization: `${SUPABASE_URL}/auth/v1/oauth/authorize`,
+  token: `${SUPABASE_URL}/auth/v1/oauth/token`,
   userinfo: `${SUPABASE_URL}/auth/v1/user`,
   jwks: `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`,
   oidcDiscovery: `${SUPABASE_URL}/auth/v1/.well-known/openid-configuration`,

@@ -39,7 +39,7 @@ export default function Authorize() {
 
   const [validatedReq, setValidatedReq] = useState<ValidatedRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [phase, setPhase] = useState<"validating" | "login" | "consent" | "redirecting">("validating");
+  const [phase, setPhase] = useState<"validating" | "login" | "consent" | "redirecting" | "error">("validating");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,7 +51,7 @@ export default function Authorize() {
     const result = validateAuthRequest(searchParams);
     if (!result.ok) {
       setError(result.error);
-      setPhase("validating");
+      setPhase("error");
       return;
     }
     setValidatedReq(result.data);
@@ -136,7 +136,7 @@ export default function Authorize() {
   };
 
   // ─── Loading ────────────────────────────────────────────────────────────────
-  if (loading || phase === "validating" || phase === "redirecting") {
+  if (loading || (phase === "validating" && !error) || phase === "redirecting") {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3">
         <Loader2 className="animate-spin text-primary" size={32} />

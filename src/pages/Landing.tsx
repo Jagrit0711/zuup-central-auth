@@ -85,7 +85,7 @@ const CODE_SNIPPET = `const params = new URLSearchParams({
 });
 
 window.location.href =
-  \`https://auth.zuup.dev/authorize?\${params}\`;`;
+  \`https://qnapwukqhybziduhzpow.supabase.co/auth/v1/oauth/authorize?\${params}\`;`;
 
 // Animated counter hook
 function useCounter(target: number, duration = 1200) {
@@ -662,7 +662,7 @@ export default function Landing() {
   <span className="str">  code_challenge_method</span>: <span className="str">'S256'</span>,{"\n"}
 {"});"}{"\n\n"}
 <span className="prop">window</span>.location.href ={"\n"}
-  <span className="str">`https://auth.zuup.dev/authorize?</span>{"${params}"}<span className="str">`</span>;
+  <span className="str">`https://qnapwukqhybziduhzpow.supabase.co/auth/v1/oauth/authorize?</span>{"${params}"}<span className="str">`</span>;
           </div>
         </div>
       </section>

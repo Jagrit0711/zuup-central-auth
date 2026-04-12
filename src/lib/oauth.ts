@@ -121,6 +121,58 @@ export const REGISTERED_CLIENTS: Record<string, OAuthClient> = {
   },
 };
 
+const CUSTOM_APPS_KEY = "zuup_custom_apps";
+
+function getCustomRegisteredClients(): Record<string, OAuthClient> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = localStorage.getItem(CUSTOM_APPS_KEY);
+    if (!raw) return {};
+
+    const apps = JSON.parse(raw) as Array<{
+      client_id: string;
+      name: string;
+      homepage_url: string;
+      icon_url?: string;
+      allowed_redirect_uris: string[];
+      allowed_scopes: string[];
+      is_first_party: boolean;
+      created_at?: string;
+    }>;
+
+    return Object.fromEntries(
+      apps
+        .filter((app) =>
+          app &&
+          app.client_id &&
+          app.name &&
+          app.homepage_url &&
+          Array.isArray(app.allowed_redirect_uris) &&
+          Array.isArray(app.allowed_scopes)
+        )
+        .map((app) => [app.client_id, {
+          client_id: app.client_id,
+          name: app.name,
+          homepage_url: app.homepage_url,
+          icon_url: app.icon_url,
+          allowed_redirect_uris: app.allowed_redirect_uris,
+          allowed_scopes: app.allowed_scopes as OAuthScope[],
+          is_first_party: app.is_first_party,
+          created_at: app.created_at,
+        } satisfies OAuthClient]),
+    );
+  } catch {
+    return {};
+  }
+}
+
+export function getRegisteredClients(): Record<string, OAuthClient> {
+  return { ...REGISTERED_CLIENTS, ...getCustomRegisteredClients() };
+}
+
 // ─── Authorization Code Store (localStorage for demo; use DB in prod) ─────────
 
 const CODE_STORE_KEY = "zuup_auth_codes";
@@ -215,21 +267,29 @@ export interface ValidatedRequest {
   nonce?: string;
 }
 
+function getParam(params: URLSearchParams, ...names: string[]): string {
+  for (const name of names) {
+    const value = params.get(name);
+    if (value) return value;
+  }
+  return "";
+}
+
 export function validateAuthRequest(params: URLSearchParams): { ok: true; data: ValidatedRequest } | { ok: false; error: string } {
-  const client_id = params.get("client_id") || "";
-  const redirect_uri = params.get("redirect_uri") || "";
-  const scope = params.get("scope") || "openid profile email";
-  const state = params.get("state") || undefined;
-  const code_challenge = params.get("code_challenge") || undefined;
-  const code_challenge_method = (params.get("code_challenge_method") || "S256") as "S256" | "plain";
-  const response_type = params.get("response_type") || "";
-  const nonce = params.get("nonce") || undefined;
+  const client_id = getParam(params, "client_id", "clientId");
+  const redirect_uri = getParam(params, "redirect_uri", "redirectUri");
+  const scope = getParam(params, "scope") || "openid profile email";
+  const state = getParam(params, "state") || undefined;
+  const code_challenge = getParam(params, "code_challenge", "codeChallenge") || undefined;
+  const code_challenge_method = (getParam(params, "code_challenge_method", "codeChallengeMethod") || "S256") as "S256" | "plain";
+  const response_type = getParam(params, "response_type", "responseType");
+  const nonce = getParam(params, "nonce") || undefined;
 
   if (!client_id) return { ok: false, error: "Missing client_id" };
   if (!redirect_uri) return { ok: false, error: "Missing redirect_uri" };
   if (response_type && response_type !== "code") return { ok: false, error: `Unsupported response_type: ${response_type}. Only 'code' is supported.` };
 
-  const client = REGISTERED_CLIENTS[client_id];
+  const client = getRegisteredClients()[client_id];
   if (!client) return { ok: false, error: `Unknown client_id: ${client_id}` };
 
   const isValidRedirect = client.allowed_redirect_uris.some(

@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { UserPlus, Eye, EyeOff, Loader2 } from "lucide-react";
-import { validateRedirectUri } from "@/lib/supabase";
 
 export default function Signup() {
   const [email, setEmail] = useState("");
