@@ -1,16 +1,24 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ZuupLogo } from "@/components/ZuupLogo";
 import { OAUTH_ENDPOINTS, REGISTERED_APPS } from "@/lib/supabase";
 import {
   LogOut, Copy, Shield, Key, Globe, User, Mail, Lock,
-  Loader2, Check, ExternalLink, Settings, Code2, Clock,
+  Loader2, Check, Upload, Code2, Clock, Plus, Trash2, Camera,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function CopyRow({ label, url }: { label: string; url: string }) {
   const copy = () => {
@@ -34,21 +42,37 @@ const APP_ICONS: Record<string, React.ReactNode> = {
   zuupdev: <Globe size={16} />,
 };
 
+interface CustomApp {
+  client_id: string;
+  name: string;
+  icon: string;
+  allowed_redirect_uris: string[];
+}
+
 export default function Profile() {
   const { user, session, signOut, updateProfile, updateEmail, updatePassword } = useAuth();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Profile editing
   const [fullName, setFullName] = useState(user?.user_metadata?.full_name || "");
   const [username, setUsername] = useState(user?.user_metadata?.username || "");
   const [newEmail, setNewEmail] = useState(user?.email || "");
+  const [avatarUrl, setAvatarUrl] = useState(user?.user_metadata?.avatar_url || "");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Password change
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+
+  // Custom apps management
+  const [customApps, setCustomApps] = useState<CustomApp[]>([]);
+  const [showAddApp, setShowAddApp] = useState(false);
+  const [newAppId, setNewAppId] = useState("");
+  const [newAppName, setNewAppName] = useState("");
+  const [newAppRedirectUri, setNewAppRedirectUri] = useState("");
 
   const [activeTab, setActiveTab] = useState<"profile" | "security" | "apps" | "developers">("profile");
 
@@ -57,10 +81,42 @@ export default function Profile() {
     navigate("/login");
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("File size must be less than 2MB");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${user?.id}-${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
+      
+      await updateProfile({ avatar_url: data.publicUrl });
+      setAvatarUrl(data.publicUrl);
+      toast.success("Avatar updated!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload avatar");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     setSavingProfile(true);
     try {
-      await updateProfile({ full_name: fullName, username });
+      await updateProfile({ full_name: fullName, username, avatar_url: avatarUrl });
       if (newEmail !== user?.email) {
         await updateEmail(newEmail);
         toast.success("Check your new email to confirm the change");
@@ -87,7 +143,6 @@ export default function Profile() {
     try {
       await updatePassword(newPassword);
       toast.success("Password updated!");
-      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
@@ -97,12 +152,41 @@ export default function Profile() {
     }
   };
 
+  const handleAddCustomApp = () => {
+    if (!newAppId || !newAppName || !newAppRedirectUri) {
+      toast.error("All fields are required");
+      return;
+    }
+
+    const newApp: CustomApp = {
+      client_id: newAppId,
+      name: newAppName,
+      icon: "",
+      allowed_redirect_uris: [newAppRedirectUri],
+    };
+
+    setCustomApps([...customApps, newApp]);
+    toast.success(`${newAppName} added successfully!`);
+    setShowAddApp(false);
+    setNewAppId("");
+    setNewAppName("");
+    setNewAppRedirectUri("");
+  };
+
+  const handleDeleteCustomApp = (clientId: string) => {
+    setCustomApps(customApps.filter(app => app.client_id !== clientId));
+    toast.success("App removed");
+  };
+
   const tabs = [
     { id: "profile" as const, label: "Profile", icon: <User size={16} /> },
     { id: "security" as const, label: "Security", icon: <Lock size={16} /> },
     { id: "apps" as const, label: "Connected Apps", icon: <Globe size={16} /> },
     { id: "developers" as const, label: "Developers", icon: <Key size={16} /> },
   ];
+
+  const displayName = fullName || user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Zuup User";
+  const avatarInitial = displayName[0]?.toUpperCase() || "Z";
 
   return (
     <div className="min-h-screen">
@@ -122,10 +206,14 @@ export default function Profile() {
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
-              <div className="w-7 h-7 rounded-full zuup-gradient flex items-center justify-center text-xs font-semibold text-primary-foreground">
-                {user?.email?.[0]?.toUpperCase() || "Z"}
-              </div>
-              {user?.user_metadata?.full_name || user?.email}
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={displayName} className="w-7 h-7 rounded-full object-cover" />
+              ) : (
+                <div className="w-7 h-7 rounded-full zuup-gradient flex items-center justify-center text-xs font-semibold text-primary-foreground">
+                  {avatarInitial}
+                </div>
+              )}
+              {displayName}
             </div>
             <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-muted-foreground hover:text-foreground">
               <LogOut size={16} />
@@ -162,11 +250,31 @@ export default function Profile() {
 
             {/* Avatar */}
             <div className="flex items-center gap-4">
-              <div className="w-20 h-20 rounded-full zuup-gradient flex items-center justify-center text-2xl font-bold text-primary-foreground zuup-glow">
-                {fullName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "Z"}
+              <div className="relative">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={displayName} className="w-20 h-20 rounded-full object-cover zuup-glow" />
+                ) : (
+                  <div className="w-20 h-20 rounded-full zuup-gradient flex items-center justify-center text-2xl font-bold text-primary-foreground zuup-glow">
+                    {avatarInitial}
+                  </div>
+                )}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors"
+                >
+                  {uploadingAvatar ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarUpload}
+                  className="hidden"
+                />
               </div>
               <div>
-                <p className="font-medium text-foreground">{fullName || "Zuup User"}</p>
+                <p className="font-medium text-foreground">{displayName}</p>
                 <p className="text-sm text-muted-foreground">{user?.email}</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Member since {user?.created_at ? new Date(user.created_at).toLocaleDateString() : "—"}
@@ -293,12 +401,18 @@ export default function Profile() {
         {/* Connected Apps Tab */}
         {activeTab === "apps" && (
           <div className="space-y-6 max-w-2xl">
-            <div>
-              <h2 className="text-xl font-semibold text-foreground">Connected Apps</h2>
-              <p className="text-sm text-muted-foreground mt-1">Apps that use your Zuup account for sign-in</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-foreground">Connected Apps</h2>
+                <p className="text-sm text-muted-foreground mt-1">Apps that use your Zuup account for sign-in</p>
+              </div>
+              <Button onClick={() => setShowAddApp(true)} size="sm" className="zuup-gradient">
+                <Plus size={16} /> Add App
+              </Button>
             </div>
 
             <div className="space-y-3">
+              {/* Default Zuup apps */}
               {Object.values(REGISTERED_APPS).map((app) => (
                 <div key={app.client_id} className="glass-card rounded-xl p-5 flex items-center gap-4">
                   <div className="w-10 h-10 rounded-lg bg-secondary/50 flex items-center justify-center text-primary">
@@ -314,7 +428,80 @@ export default function Profile() {
                   </div>
                 </div>
               ))}
+
+              {/* Custom apps */}
+              {customApps.map((app) => (
+                <div key={app.client_id} className="glass-card rounded-xl p-5 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-secondary/50 flex items-center justify-center text-primary">
+                    <Globe size={18} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-foreground">{app.name}</p>
+                    <p className="text-xs text-muted-foreground">client_id: {app.client_id}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Redirects: {app.allowed_redirect_uris.join(", ")}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDeleteCustomApp(app.client_id)}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </div>
+              ))}
             </div>
+
+            {/* Add App Dialog */}
+            <Dialog open={showAddApp} onOpenChange={setShowAddApp}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Register New App</DialogTitle>
+                  <DialogDescription>
+                    Add a new application to use Zuup authentication
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Client ID</Label>
+                    <Input
+                      value={newAppId}
+                      onChange={(e) => setNewAppId(e.target.value)}
+                      placeholder="myapp"
+                      className="bg-secondary/50"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>App Name</Label>
+                    <Input
+                      value={newAppName}
+                      onChange={(e) => setNewAppName(e.target.value)}
+                      placeholder="My Application"
+                      className="bg-secondary/50"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Redirect URI</Label>
+                    <Input
+                      value={newAppRedirectUri}
+                      onChange={(e) => setNewAppRedirectUri(e.target.value)}
+                      placeholder="https://myapp.com/callback"
+                      className="bg-secondary/50"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setShowAddApp(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleAddCustomApp} className="zuup-gradient">
+                    <Plus size={16} /> Add App
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
 
@@ -354,13 +541,13 @@ export default function Profile() {
                 <div className="p-4 rounded-lg bg-secondary/30 border border-border/40 space-y-2">
                   <p className="text-sm font-medium text-foreground">1. Redirect to Zuup Auth</p>
                   <pre className="text-xs bg-background/50 p-3 rounded-md overflow-x-auto text-muted-foreground">
-{`// In your app (e.g., code.zuup.dev)
+{`// In your app
 const ZUUP_AUTH = "https://auth.zuup.dev";
-const CLIENT_ID = "zuupcode"; // your registered client_id
-const REDIRECT_URI = "https://code.zuup.dev/callback";
+const CLIENT_ID = "your_client_id";
+const REDIRECT_URI = "https://yourapp.com/callback";
 
 function loginWithZuup() {
-  const state = crypto.randomUUID(); // CSRF protection
+  const state = crypto.randomUUID();
   sessionStorage.setItem("zuup_auth_state", state);
   
   window.location.href = \`\${ZUUP_AUTH}/authorize?\` +
@@ -374,44 +561,20 @@ function loginWithZuup() {
                 <div className="p-4 rounded-lg bg-secondary/30 border border-border/40 space-y-2">
                   <p className="text-sm font-medium text-foreground">2. Handle the Callback</p>
                   <pre className="text-xs bg-background/50 p-3 rounded-md overflow-x-auto text-muted-foreground">
-{`// On your /callback page
-const params = new URLSearchParams(window.location.search);
+{`const params = new URLSearchParams(window.location.search);
 const accessToken = params.get("access_token");
-const refreshToken = params.get("refresh_token");
 const state = params.get("state");
 
-// Verify state matches
+// Verify state
 if (state !== sessionStorage.getItem("zuup_auth_state")) {
-  throw new Error("Invalid state - possible CSRF attack");
+  throw new Error("Invalid state");
 }
 
-// Use the token with Supabase client
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Use with Supabase
 await supabase.auth.setSession({
   access_token: accessToken,
-  refresh_token: refreshToken,
-});
-
-// User is now authenticated!
-const { data: { user } } = await supabase.auth.getUser();`}
-                  </pre>
-                </div>
-
-                <div className="p-4 rounded-lg bg-secondary/30 border border-border/40 space-y-2">
-                  <p className="text-sm font-medium text-foreground">3. Login Button Component (React)</p>
-                  <pre className="text-xs bg-background/50 p-3 rounded-md overflow-x-auto text-muted-foreground">
-{`function LoginWithZuup() {
-  return (
-    <button onClick={loginWithZuup} className="zuup-login-btn">
-      <img src="https://www.zuup.dev/lovable-uploads/
-        b44b8051-6117-4b37-999d-014c4c33dd13.png"
-        alt="Zuup" height="20" />
-      Login with Zuup
-    </button>
-  );
-}`}
+  refresh_token: params.get("refresh_token"),
+});`}
                   </pre>
                 </div>
               </div>
