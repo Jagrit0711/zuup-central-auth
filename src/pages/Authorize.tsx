@@ -33,6 +33,15 @@ const SCOPE_ICONS: Record<string, React.ReactNode> = {
   shield: <ShieldCheck size={15} />,
 };
 
+function getHostname(url?: string): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
 export default function Authorize() {
   const [searchParams] = useSearchParams();
   const { user, session, loading, signIn } = useAuth();
@@ -244,6 +253,8 @@ export default function Authorize() {
   if (phase === "consent") {
     const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
     const initial = displayName[0]?.toUpperCase() || "Z";
+    const appHostname = getHostname(validatedReq.client.homepage_url);
+    const hasValidHomepage = Boolean(appHostname);
 
     return (
       <AuthLayout>
@@ -260,10 +271,10 @@ export default function Authorize() {
               </div>
               <div className="flex flex-col items-start">
                 <p className="font-semibold text-foreground">{validatedReq.client.name}</p>
-                {validatedReq.client.homepage_url && (
+                {hasValidHomepage && validatedReq.client.homepage_url && (
                   <a href={validatedReq.client.homepage_url} target="_blank" rel="noopener noreferrer"
                     className="text-xs text-muted-foreground hover:text-primary flex items-center gap-0.5">
-                    {new URL(validatedReq.client.homepage_url).hostname}
+                    {appHostname}
                     <ExternalLink size={10} />
                   </a>
                 )}
@@ -332,7 +343,12 @@ export default function Authorize() {
 
           <p className="text-center text-xs text-muted-foreground">
             By clicking Allow, you authorize {validatedReq.client.name} to use your account in accordance with their{" "}
-            <a href={validatedReq.client.homepage_url} className="text-primary hover:underline">terms of service</a>.
+            {hasValidHomepage && validatedReq.client.homepage_url ? (
+              <a href={validatedReq.client.homepage_url} className="text-primary hover:underline">terms of service</a>
+            ) : (
+              <span>terms of service</span>
+            )}
+            .
           </p>
         </div>
       </AuthLayout>

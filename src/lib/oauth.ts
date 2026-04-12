@@ -299,6 +299,12 @@ export function validateAuthRequest(params: URLSearchParams): { ok: true; data: 
 
   if (!client_id) return { ok: false, error: "Missing client_id" };
   if (!redirect_uri) return { ok: false, error: "Missing redirect_uri" };
+  try {
+    // Require absolute redirect URLs to keep redirect helpers safe.
+    new URL(redirect_uri);
+  } catch {
+    return { ok: false, error: "Invalid redirect_uri format" };
+  }
   if (response_type && response_type !== "code") return { ok: false, error: `Unsupported response_type: ${response_type}. Only 'code' is supported.` };
 
   const client = getRegisteredClients()[client_id];
