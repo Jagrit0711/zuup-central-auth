@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { LogIn, Eye, EyeOff, Loader2 } from "lucide-react";
-import { validateRedirectUri } from "@/lib/supabase";
+import { logAuditEvent } from "@/lib/oauth";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -23,29 +23,19 @@ export default function Login() {
     setLoading(true);
     try {
       const data = await signIn(email, password);
+      logAuditEvent({ type: "login", user_id: data.user?.id, details: { method: "email_password" } });
       toast.success("Welcome back!");
 
-      // Check if there's an SSO redirect pending
-      const clientId = searchParams.get("client_id");
-      const redirectUri = searchParams.get("redirect_uri");
-      const state = searchParams.get("state");
-
-      if (clientId && redirectUri) {
-        const app = validateRedirectUri(clientId, redirectUri);
-        if (app && data.session) {
-          const url = new URL(redirectUri);
-          url.searchParams.set("access_token", data.session.access_token);
-          url.searchParams.set("refresh_token", data.session.refresh_token || "");
-          url.searchParams.set("token_type", "bearer");
-          url.searchParams.set("expires_in", "3600");
-          if (state) url.searchParams.set("state", state);
-          window.location.href = url.toString();
-          return;
-        }
+      // If there are SSO params, redirect to the authorize page to handle them properly
+      const hasOAuthParams = searchParams.has("client_id") && searchParams.has("redirect_uri");
+      if (hasOAuthParams) {
+        navigate(`/authorize?${searchParams.toString()}`);
+        return;
       }
 
       navigate("/profile");
     } catch (err: any) {
+      logAuditEvent({ type: "login_failed", details: { email, reason: err.message } });
       toast.error(err.message || "Invalid credentials");
     } finally {
       setLoading(false);
