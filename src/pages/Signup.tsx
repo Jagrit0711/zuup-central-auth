@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { UserPlus, Eye, EyeOff, Loader2 } from "lucide-react";
+import { validateRedirectUri } from "@/lib/supabase";
 
 export default function Signup() {
   const [email, setEmail] = useState("");
@@ -15,6 +16,11 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signUp } = useAuth();
+  const [searchParams] = useSearchParams();
+
+  const clientId = searchParams.get("client_id") || "";
+  const redirectUri = searchParams.get("redirect_uri") || "";
+  const state = searchParams.get("state") || "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +38,11 @@ export default function Signup() {
       setLoading(false);
     }
   };
+
+  // Preserve SSO params in login link
+  const loginLink = clientId
+    ? `/login?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`
+    : "/login";
 
   return (
     <AuthLayout>
@@ -98,7 +109,7 @@ export default function Signup() {
 
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
-          <Link to="/login" className="text-primary hover:underline font-medium">
+          <Link to={loginLink} className="text-primary hover:underline font-medium">
             Sign in
           </Link>
         </p>

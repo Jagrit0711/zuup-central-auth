@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { LogIn, Eye, EyeOff, Loader2 } from "lucide-react";
+import { validateRedirectUri } from "@/lib/supabase";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -15,14 +16,35 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await signIn(email, password);
+      const data = await signIn(email, password);
       toast.success("Welcome back!");
-      navigate("/dashboard");
+
+      // Check if there's an SSO redirect pending
+      const clientId = searchParams.get("client_id");
+      const redirectUri = searchParams.get("redirect_uri");
+      const state = searchParams.get("state");
+
+      if (clientId && redirectUri) {
+        const app = validateRedirectUri(clientId, redirectUri);
+        if (app && data.session) {
+          const url = new URL(redirectUri);
+          url.searchParams.set("access_token", data.session.access_token);
+          url.searchParams.set("refresh_token", data.session.refresh_token || "");
+          url.searchParams.set("token_type", "bearer");
+          url.searchParams.set("expires_in", "3600");
+          if (state) url.searchParams.set("state", state);
+          window.location.href = url.toString();
+          return;
+        }
+      }
+
+      navigate("/profile");
     } catch (err: any) {
       toast.error(err.message || "Invalid credentials");
     } finally {
@@ -34,7 +56,7 @@ export default function Login() {
     <AuthLayout>
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="text-center space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">Sign in to your account</h1>
+          <h1 className="text-xl font-semibold text-foreground">Sign in to Zuup</h1>
           <p className="text-sm text-muted-foreground">Access all Zuup services with one account</p>
         </div>
 

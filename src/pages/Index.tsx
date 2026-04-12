@@ -9,7 +9,7 @@ export default function Index() {
 
   useEffect(() => {
     if (!loading) {
-      navigate(user ? "/dashboard" : "/login", { replace: true });
+      navigate(user ? "/profile" : "/login", { replace: true });
     }
   }, [user, loading, navigate]);
 

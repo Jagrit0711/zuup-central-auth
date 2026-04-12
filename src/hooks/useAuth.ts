@@ -61,5 +61,20 @@ export function useAuth() {
     if (error) throw error;
   };
 
-  return { user, session, loading, signIn, signUp, signOut, resetPassword, updatePassword };
+  const updateProfile = async (data: { full_name?: string; avatar_url?: string; username?: string }) => {
+    const { error } = await supabase.auth.updateUser({ data });
+    if (error) throw error;
+  };
+
+  const updateEmail = async (email: string) => {
+    const { error } = await supabase.auth.updateUser({ email });
+    if (error) throw error;
+  };
+
+  return {
+    user, session, loading,
+    signIn, signUp, signOut,
+    resetPassword, updatePassword,
+    updateProfile, updateEmail,
+  };
 }
