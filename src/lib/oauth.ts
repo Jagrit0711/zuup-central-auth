@@ -87,6 +87,7 @@ export const REGISTERED_CLIENTS: Record<string, OAuthClient> = {
     allowed_redirect_uris: [
       "https://code.zuup.dev/callback",
       "https://code.zuup.dev/auth/callback",
+      "https://watch.zuup.dev/auth/zuup/callback",
       "http://localhost:3000/callback",
       "http://localhost:5173/callback",
     ],

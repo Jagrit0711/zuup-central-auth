@@ -100,7 +100,7 @@ const BUILTIN_APPS: RegisteredApp[] = [
     name: "ZuupWatch",
     homepage_url: "https://watch.zuup.dev",
     icon_url: "https://www.zuup.dev/favicon.ico",
-    allowed_redirect_uris: ["https://watch.zuup.dev/callback"],
+    allowed_redirect_uris: ["https://watch.zuup.dev/callback", "https://watch.zuup.dev/auth/zuup/callback"],
     allowed_scopes: ["openid", "profile", "email", "zuup:read"],
     is_first_party: true,
     created_at: "2026-01-01T00:00:00Z",
