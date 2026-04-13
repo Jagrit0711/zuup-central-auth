@@ -18,6 +18,46 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   }
 }
 
+async function postJsonWithFallback(
+  urls: string[],
+  payload: Record<string, unknown>,
+  timeoutMs: number,
+  timeoutMessage: string,
+) {
+  let lastError: Error | null = null;
+
+  for (const url of urls) {
+    try {
+      const response = await withTimeout(
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        }),
+        timeoutMs,
+        timeoutMessage,
+      );
+
+      if (response.status === 404) {
+        lastError = new Error("otp_route_not_found");
+        continue;
+      }
+
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body?.message || body?.error || "Request failed");
+      }
+
+      return body;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  throw lastError || new Error("Request failed");
+}
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -122,41 +162,21 @@ export function useAuth() {
     intent: EmailCodeIntent,
     metadata?: Record<string, unknown>,
   ) => {
-    const response = await withTimeout(
-      fetch("/api/account/otp-request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, intent, metadata }),
-      }),
-      8000,
-      "OTP request timed out after 8 seconds. Check SMTP settings and try again.",
+    return postJsonWithFallback(
+      ["/api/account/otp-request", "/api/account/otp/request"],
+      { email, intent, metadata },
+      20000,
+      "OTP request timed out after 20 seconds. Check SMTP settings and try again.",
     );
-
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(body?.message || body?.error || "Could not send code");
-    }
-
-    return body;
   };
 
   const verifyEmailCode = async (email: string, token: string, intent: EmailCodeIntent = "login") => {
-    const response = await withTimeout(
-      fetch("/api/account/otp-verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, code: token, intent }),
-      }),
-      8000,
-      "OTP verification timed out after 8 seconds. Try again.",
+    const body = await postJsonWithFallback(
+      ["/api/account/otp-verify", "/api/account/otp/verify"],
+      { email, code: token, intent },
+      12000,
+      "OTP verification timed out after 12 seconds. Try again.",
     );
-
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(body?.message || body?.error || "Invalid code");
-    }
 
     await supabase.auth.signOut().catch(() => {});
     setUser(body.user);
