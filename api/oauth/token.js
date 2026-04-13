@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "invalid_request", msg: "Missing code or redirect_uri" });
   }
 
-  const client = resolveClientCredentials(req, client_id);
+  const client = await resolveClientCredentials(req, client_id);
   if (client.error) {
     return res.status(401).json({ error: "invalid_client", details: client });
   }

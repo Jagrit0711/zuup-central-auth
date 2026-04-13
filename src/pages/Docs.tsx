@@ -28,8 +28,8 @@ const SCOPES = [
 ];
 
 const ENDPOINTS = [
-  { method: "GET", path: "/authorize", desc: "Initiate authorization. Redirects to login/consent." },
-  { method: "POST", path: "/token", desc: "Exchange authorization code for access + refresh tokens." },
+  { method: "GET", path: "https://auth.zuup.dev/authorize", desc: "Initiate authorization. Redirects to login/consent." },
+  { method: "POST", path: "https://auth.zuup.dev/api/oauth/token", desc: "Exchange authorization code for access + refresh tokens." },
   { method: "GET", path: "/userinfo", desc: "Fetch the authenticated user's profile (Bearer token)." },
   { method: "POST", path: "/revoke", desc: "Revoke an access or refresh token." },
   { method: "GET", path: "/.well-known/openid-configuration", desc: "OIDC discovery document." },
@@ -82,7 +82,7 @@ async function loginWithZuup() {
     code_challenge_method: 'S256',
   });
 
-  window.location.href = \`https://qnapwukqhybziduhzpow.supabase.co/auth/v1/oauth/authorize?\${params}\`;
+  window.location.href = \`https://auth.zuup.dev/authorize?\${params}\`;
 }
 
 // 3. Handle callback
@@ -96,7 +96,7 @@ async function handleCallback() {
   }
 
   // Exchange code (do this server-side in production!)
-  const res = await fetch('https://qnapwukqhybziduhzpow.supabase.co/auth/v1/oauth/token', {
+  const res = await fetch('/api/auth/token-exchange', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -137,7 +137,7 @@ function LoginButton() {
       code_challenge_method: 'S256',
     });
     
-    window.location.href = \`https://qnapwukqhybziduhzpow.supabase.co/auth/v1/oauth/authorize?\${params}\`;
+    window.location.href = \`https://auth.zuup.dev/authorize?\${params}\`;
   };
 
   return <button onClick={login}>Login with Zuup</button>;
@@ -174,7 +174,7 @@ export async function GET(req: NextRequest) {
   const verifier = req.cookies.get('pkce_verifier')?.value;
   
   // Exchange code for tokens (this IS server-side — safe!)
-  const tokenRes = await fetch('https://qnapwukqhybziduhzpow.supabase.co/auth/v1/oauth/token', {
+  const tokenRes = await fetch('https://auth.zuup.dev/api/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  validateAuthRequest,
   buildSuccessRedirect,
   buildErrorRedirect,
   logAuditEvent,
@@ -56,13 +55,25 @@ export default function Authorize() {
 
   // Step 1: Validate the request parameters
   useEffect(() => {
-    const result = validateAuthRequest(searchParams);
-    if (!result.ok) {
-      setError(result.error);
-      setPhase("error");
-      return;
-    }
-    setValidatedReq(result.data);
+    const payload = Object.fromEntries(searchParams.entries());
+    fetch("/api/oauth/validate-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(body?.error || "Invalid request");
+          setPhase("error");
+          return;
+        }
+        setValidatedReq(body);
+      })
+      .catch((err) => {
+        setError(err?.message || "Failed to validate request");
+        setPhase("error");
+      });
   }, [searchParams]);
 
   // Step 2: If already logged in, go straight to consent (or auto-approve for first-party)

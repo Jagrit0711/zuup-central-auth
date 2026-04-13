@@ -68,7 +68,38 @@ export function signJwtHs256(payload, secret) {
   return `${unsigned}.${signature}`;
 }
 
-export function resolveClientCredentials(req, bodyClientId) {
+function getClientsTableConfig() {
+  return {
+    url: (process.env.SUPABASE_URL || "https://qnapwukqhybziduhzpow.supabase.co").replace(/\/+$/, ""),
+    key: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+    table: process.env.ZUUP_OAUTH_CLIENTS_TABLE || "oauth_clients",
+  };
+}
+
+async function getClientSecretFromDb(clientId) {
+  const cfg = getClientsTableConfig();
+  if (!cfg.key) return null;
+
+  const query = new URLSearchParams({
+    client_id: `eq.${clientId}`,
+    select: "client_secret",
+    limit: "1",
+  });
+
+  const res = await fetch(`${cfg.url}/rest/v1/${cfg.table}?${query.toString()}`, {
+    headers: {
+      apikey: cfg.key,
+      Authorization: `Bearer ${cfg.key}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!res.ok) return null;
+  const rows = await res.json();
+  return rows?.[0]?.client_secret || null;
+}
+
+export async function resolveClientCredentials(req, bodyClientId) {
   const authHeader = req.headers.authorization || "";
   let basicClientId = "";
   let basicClientSecret = "";
@@ -105,8 +136,21 @@ export function resolveClientCredentials(req, bodyClientId) {
   }
 
   const rawMap = process.env.ZUUP_CLIENT_SECRETS_JSON;
+  const clientId = basicClientId || bodyClientId;
+  const clientSecret = basicClientSecret || req.body?.client_secret;
+
+  if (!clientId) return { error: "invalid_client", msg: "Missing client_id" };
+
+  // Prefer dynamic table-backed lookup when env map is not configured.
   if (!rawMap) {
-    return { error: "server_not_configured", msg: "Missing client credential config" };
+    const dbSecret = await getClientSecretFromDb(clientId);
+    if (!dbSecret) {
+      return { error: "invalid_client", msg: "Unknown client_id" };
+    }
+    if (clientSecret && clientSecret !== dbSecret) {
+      return { error: "invalid_client", msg: "Invalid client_secret" };
+    }
+    return { clientId, clientSecret: dbSecret };
   }
 
   let map;
@@ -116,10 +160,6 @@ export function resolveClientCredentials(req, bodyClientId) {
     return { error: "server_not_configured", msg: "Invalid ZUUP_CLIENT_SECRETS_JSON" };
   }
 
-  const clientId = basicClientId || bodyClientId;
-  const clientSecret = basicClientSecret || req.body?.client_secret;
-
-  if (!clientId) return { error: "invalid_client", msg: "Missing client_id" };
   const expected = map[clientId];
   if (!expected) return { error: "invalid_client", msg: "Unknown client_id" };
   if (clientSecret && clientSecret !== expected) {

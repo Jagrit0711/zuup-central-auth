@@ -408,10 +408,25 @@ export default function Profile() {
     };
 
     const updated = [...customApps, app];
-    setCustomApps(updated);
-    localStorage.setItem("zuup_custom_apps", JSON.stringify(updated));
-    setNewCreatedApp(app);
-    logAuditEvent({ type: "client_registered", user_id: user?.id, client_id: app.client_id, details: { name: app.name } });
+    fetch("/api/oauth/register-client", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(app),
+    })
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(body?.message || body?.error || "Failed to register app");
+        }
+
+        setCustomApps(updated);
+        localStorage.setItem("zuup_custom_apps", JSON.stringify(updated));
+        setNewCreatedApp(app);
+        logAuditEvent({ type: "client_registered", user_id: user?.id, client_id: app.client_id, details: { name: app.name } });
+      })
+      .catch((err: any) => {
+        toast.error(err?.message || "Failed to register app");
+      });
   };
 
   const handleCreateApiKey = () => {
