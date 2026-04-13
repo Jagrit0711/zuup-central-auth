@@ -1,80 +1,22 @@
-import nodemailer from "nodemailer";
-import { createOrUpdateUser, generateOtpCode, getUserByEmail, normalizeEmail, pruneOtpCodes, storeOtpCode } from "../../server/account/store.js";
 import { parseBody } from "../../server/oauth/utils.js";
 
-function getMailConfig() {
-  return {
-    host: process.env.SMTP_HOST || "smtp.office365.com",
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: false,
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-    auth: {
-      user: process.env.SMTP_USER || process.env.OUTBOUND_SMTP_USER || "",
-      pass: process.env.SMTP_PASS || process.env.OUTBOUND_SMTP_PASS || "",
-    },
-  };
-}
+const SUPABASE_URL = "https://qnapwukqhybziduhzpow.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuYXB3dWtxaHliemlkdWh6cG93Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjA3ODYsImV4cCI6MjA4NzkzNjc4Nn0.x1a-lyiPhBDqR2U-ZAC_waSa-2smUs_KpSGXbK54rp0";
 
-function getFromAddress() {
-  return process.env.SMTP_FROM || process.env.OUTBOUND_SMTP_FROM || "noreply@zuup.dev";
-}
-
-async function sendOtpEmail({ to, code, purpose }) {
-  const transporter = nodemailer.createTransport(getMailConfig());
-  const subject = purpose === "signup" ? "Your Zuup signup code" : "Your Zuup sign in code";
-  const html = `
-    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111827">
-      <h2 style="margin:0 0 16px">Your Zuup verification code</h2>
-      <p style="font-size:15px;line-height:1.6">Use this 6-digit code to finish signing in:</p>
-      <div style="font-size:36px;letter-spacing:10px;font-weight:700;padding:18px 22px;margin:20px 0;border:1px solid #e5e7eb;border-radius:14px;background:#f9fafb;text-align:center">${code}</div>
-      <p style="font-size:13px;color:#6b7280;line-height:1.6">This code expires in 24 hours. If you did not request it, you can ignore this message.</p>
-    </div>
-  `;
-
-  await transporter.sendMail({
-    from: getFromAddress(),
-    to,
-    subject,
-    html,
-  });
-}
-
-function getMissingSmtpVars() {
-  const required = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"];
-  return required.filter((name) => !process.env[name]);
-}
-
-function toSafeErrorMessage(error) {
-  const msg = String(error?.message || error || "otp_send_failed");
-  if (/Invalid login|EAUTH|535|Authentication unsuccessful/i.test(msg)) {
-    return "SMTP authentication failed. Verify SMTP_USER/SMTP_PASS and mailbox SMTP AUTH policy.";
-  }
-  if (/ETIMEDOUT|timeout|ESOCKET|ECONNECTION|EHOSTUNREACH/i.test(msg)) {
-    return "SMTP connection timed out. Verify SMTP host/port and firewall/network policy.";
-  }
-  return msg;
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, apikey, authorization");
     return res.status(204).end();
   }
 
   if (req.method !== "POST") {
     return res.status(405).json({ error: "method_not_allowed", expected: ["POST", "OPTIONS"] });
-  }
-
-  const missingVars = getMissingSmtpVars();
-  if (missingVars.length > 0) {
-    return res.status(500).json({
-      error: "smtp_not_configured",
-      message: `Missing SMTP env vars: ${missingVars.join(", ")}`,
-    });
   }
 
   let body;
@@ -86,32 +28,38 @@ export default async function handler(req, res) {
 
   const email = normalizeEmail(body.email);
   const intent = body.intent === "signup" ? "signup" : "login";
-  const metadata = body.metadata || {};
+  const metadata = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
 
   if (!email) {
     return res.status(400).json({ error: "invalid_request", message: "email is required" });
   }
 
-  const existing = await getUserByEmail(email);
-  if (intent === "login" && !existing) {
-    return res.status(404).json({ error: "account_not_found", message: "No account found for this email" });
-  }
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      create_user: intent === "signup",
+      data: {
+        intent,
+        ...metadata,
+      },
+    }),
+  });
 
-  const user = intent === "signup"
-    ? await createOrUpdateUser({ email, metadata, allowCreate: true })
-    : existing;
+  const responseBody = await response.json().catch(() => ({}));
 
-  const code = generateOtpCode();
-  try {
-    await pruneOtpCodes();
-    await storeOtpCode({ email, purpose: intent, code, metadata });
-    await sendOtpEmail({ to: email, code, purpose: intent });
-  } catch (error) {
-    return res.status(500).json({
-      error: "otp_send_failed",
-      message: toSafeErrorMessage(error),
+  if (!response.ok) {
+    return res.status(response.status).json({
+      error: responseBody?.error || "otp_send_failed",
+      message: responseBody?.msg || responseBody?.message || "Failed to send OTP",
+      details: responseBody,
     });
   }
 
-  return res.status(200).json({ ok: true, sent: true, user_id: user?.id || null });
+  return res.status(200).json({ ok: true, sent: true, supabase: responseBody });
 }

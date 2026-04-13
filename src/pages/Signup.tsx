@@ -111,12 +111,7 @@ export default function Signup() {
       setCodeSent(true);
       toast.success("6-digit signup code sent to your email");
     } catch (err: any) {
-      const msg = String(err?.message || "");
-      if (err?.status === 504 || /504|gateway timeout/i.test(msg)) {
-        toast.error("OTP request timed out. Check SMTP/Office365 config and try again.");
-      } else {
-        toast.error(err.message || "Could not send code");
-      }
+      toast.error(err.message || "Could not send code");
     } finally {
       setSendingCode(false);
     }
