@@ -107,11 +107,12 @@ export default async function handler(req, res) {
   }
 
   const nextMetadata = buildMetadataPatch(body, globalUser?.user_metadata || {});
-  const updated = await updateUserById(authUser.id, {
+  const targetUserId = globalUser?.id || authUser.id;
+  const updated = await updateUserById(targetUserId, {
     email: String(body.email || globalUser?.email || normalizedAuthEmail || "").trim().toLowerCase() || globalUser.email,
     user_metadata: nextMetadata,
   });
 
-  const latest = updated || await getUserById(authUser.id);
+  const latest = updated || await getUserById(targetUserId);
   return res.status(200).json({ ok: true, user: latest });
 }
