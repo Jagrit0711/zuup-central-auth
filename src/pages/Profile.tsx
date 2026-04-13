@@ -142,18 +142,14 @@ const MOBILE_COUNTRY_CODES = [
 ];
 
 const APP_SHOWCASE = [
-  { name: "Zuup", url: "https://zuup.dev" },
-  { name: "Zuup Buy", url: "https://order.zuup.dev" },
-  { name: "Zuup Time", url: "https://time.zuup.dev" },
-  { name: "Zuup Code", url: "https://code.zuup.dev" },
-  { name: "Zuup Watch", url: "https://watch.zuup.dev" },
-  { name: "Zuup Giza", url: "https://giza.zuup.dev" },
-  { name: "Zuup Schools", url: "https://zuup.dev/schools" },
+  { name: "Zuup", url: "https://zuup.dev", image: "/images/zuup.png" },
+  { name: "Zuup Buy", url: "https://order.zuup.dev", image: "/images/zuupbuy.png" },
+  { name: "Zuup Time", url: "https://time.zuup.dev", image: "/images/zuuptime.png" },
+  { name: "Zuup Code", url: "https://code.zuup.dev", image: "/images/zuupcode.png" },
+  { name: "Zuup Watch", url: "https://watch.zuup.dev", image: "/images/zuupwatch.png" },
+  { name: "Zuup Giza", url: "https://giza.zuup.dev", image: "/images/zuupgiza.png" },
+  { name: "Zuup Schools", url: "https://zuup.dev/schools", image: "/images/zuupschools.png" },
 ];
-
-function appPreviewUrl(url: string, seed: number): string {
-  return `/api/account/preview-image?url=${encodeURIComponent(url)}&v=${seed}`;
-}
 
 const REVOKED_CONNECTED_APPS_KEY = "zuup_revoked_connected_apps";
 
@@ -318,8 +314,6 @@ export default function Profile() {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [creatingKey, setCreatingKey] = useState(false);
-  const [previewSeed, setPreviewSeed] = useState<number>(() => Date.now());
-  const [brokenPreviews, setBrokenPreviews] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setAuditLog(getAuditLog());
@@ -856,24 +850,6 @@ export default function Profile() {
               <div style={card}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                   <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Zuup Apps Network</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPreviewSeed(Date.now());
-                      setBrokenPreviews({});
-                    }}
-                    style={{
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: "rgba(255,255,255,0.03)",
-                      color: "#9ca3af",
-                      borderRadius: 8,
-                      fontSize: 11,
-                      padding: "5px 9px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Reload photos
-                  </button>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
                   {APP_SHOWCASE.map((app) => (
@@ -884,20 +860,21 @@ export default function Profile() {
                       rel="noopener noreferrer"
                       style={{ textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, background: "rgba(255,255,255,0.02)", color: "#e8eaf0", overflow: "hidden" }}
                     >
-                      {!brokenPreviews[app.url] ? (
-                        <img
-                          src={appPreviewUrl(app.url, previewSeed)}
-                          alt={app.name}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          onError={() => setBrokenPreviews((prev) => ({ ...prev, [app.url]: true }))}
-                          style={{ width: "100%", height: 118, objectFit: "cover", display: "block", background: "#161a22" }}
-                        />
-                      ) : (
-                        <div style={{ height: 118, background: "linear-gradient(135deg, rgba(232,66,90,0.16), rgba(16,24,39,0.8))", display: "grid", placeItems: "center", color: "#e8eaf0", fontSize: 12 }}>
-                          Preview unavailable
-                        </div>
-                      )}
+                      <img
+                        src={app.image}
+                        alt={app.name}
+                        loading="lazy"
+                        onError={(event) => {
+                          const target = event.currentTarget;
+                          target.style.display = "none";
+                          const fallback = target.parentElement?.querySelector(".app-image-fallback") as HTMLDivElement | null;
+                          if (fallback) fallback.style.display = "grid";
+                        }}
+                        style={{ width: "100%", height: 118, objectFit: "cover", display: "block", background: "#161a22" }}
+                      />
+                      <div className="app-image-fallback" style={{ display: "none", height: 118, background: "linear-gradient(135deg, rgba(232,66,90,0.16), rgba(16,24,39,0.8))", placeItems: "center", color: "#e8eaf0", fontSize: 12 }}>
+                        {app.name}
+                      </div>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: 12 }}>
                         <span style={{ fontSize: 13, fontWeight: 600 }}>{app.name}</span>
                         <Globe size={14} style={{ color: "#e8425a" }} />
