@@ -152,7 +152,7 @@ const APP_SHOWCASE = [
 ];
 
 function appPreviewUrl(url: string, seed: number): string {
-  return `https://image.thum.io/get/width/1200/crop/700/noanimate/${encodeURIComponent(url)}?v=${seed}`;
+  return `/api/account/preview-image?url=${encodeURIComponent(url)}&v=${seed}`;
 }
 
 const REVOKED_CONNECTED_APPS_KEY = "zuup_revoked_connected_apps";
