@@ -70,4 +70,75 @@
   .glass-card {
     @apply bg-card/80 backdrop-blur-xl border border-border/50;
   }
+
+  .auth-shell {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  @media (max-width: 640px) {
+    .auth-shell {
+      padding: 12px;
+      align-items: flex-start;
+    }
+
+    .auth-shell-inner {
+      width: 100%;
+      max-width: none;
+      gap: 20px;
+    }
+
+    .auth-shell-card {
+      padding: 20px !important;
+      border-radius: 20px !important;
+    }
+
+    .profile-two-col,
+    .profile-snapshot-grid {
+      grid-template-columns: 1fr !important;
+    }
+
+    .profile-two-col > * {
+      min-width: 0;
+    }
+
+    .landing-root .l-nav-inner {
+      padding-left: 1rem !important;
+      padding-right: 1rem !important;
+    }
+
+    .landing-root .l-hero,
+    .landing-root .l-section,
+    .landing-root .l-cta-inner,
+    .landing-root .l-stats-inner {
+      padding-left: 1rem !important;
+      padding-right: 1rem !important;
+    }
+
+    .landing-root .l-section,
+    .landing-root .l-cta-inner {
+      padding-top: 56px !important;
+      padding-bottom: 56px !important;
+    }
+
+    .landing-root .l-subtitle,
+    .landing-root .l-section-sub {
+      max-width: 100% !important;
+    }
+
+    .landing-root .l-code-body {
+      font-size: 12px !important;
+      padding: 18px !important;
+    }
+
+    .landing-root .l-app-card {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .landing-root .l-app-badge,
+    .landing-root .l-app-arrow {
+      margin-left: 0;
+    }
+  }
 }

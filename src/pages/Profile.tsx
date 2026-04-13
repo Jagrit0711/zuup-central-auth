@@ -865,7 +865,7 @@ export default function Profile() {
 
               <div style={card}>
                 <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600 }}>Saved Contact Snapshot</p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div className="profile-snapshot-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <CopyRow label="Country" value={country || "Not set"} />
                   <CopyRow label="Phone" value={(phoneNumber ? `${mobileCountryCode} ${phoneNumber}` : "Not set")} />
                   <CopyRow label="City" value={city || "Not set"} />
@@ -905,7 +905,7 @@ export default function Profile() {
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="profile-two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <div>
                     <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>First name</Label>
                     <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="First name" className="bg-secondary/50 border-border/60" />
@@ -980,7 +980,7 @@ export default function Profile() {
                   <Input value={addressLine2} onChange={(e) => setAddressLine2(e.target.value)} placeholder="Apartment, suite, landmark (optional)" className="bg-secondary/50 border-border/60" />
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+                <div className="profile-two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
                   <div>
                     <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>City</Label>
                     <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" className="bg-secondary/50 border-border/60" />
@@ -1053,7 +1053,7 @@ export default function Profile() {
               <div style={card}>
                 <p style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 600 }}>Active Sessions</p>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="profile-two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 12 }}>
                     <p style={{ margin: "0 0 6px", color: "#9ca3af", fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}><Monitor size={13} /> Browser</p>
                     <p style={{ margin: 0, fontSize: 13 }}>{sessionInfo.browser}</p>
@@ -1134,7 +1134,7 @@ export default function Profile() {
                   {backupCodes.length > 0 ? "Store these in a safe place. Each code can be used once." : "No backup codes available. Enable 2FA first to generate backup codes."}
                 </p>
                 {backupCodes.length > 0 && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                  <div className="profile-two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
                     {backupCodes.map((code) => (
                       <div key={code} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: "7px 10px", fontFamily: "monospace", fontSize: 12 }}>
                         {code}

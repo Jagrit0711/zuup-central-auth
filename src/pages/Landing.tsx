@@ -574,11 +574,92 @@ export default function Landing() {
         }
         .l-footer-links a:hover { color: #9ca3af; }
 
+        @media (max-width: 900px) {
+          .l-nav-inner {
+            padding: 0 1rem;
+            flex-wrap: wrap;
+            height: auto;
+            min-height: 60px;
+          }
+
+          .l-nav-actions {
+            margin-left: auto;
+          }
+
+          .l-hero {
+            padding: 72px 1rem 54px;
+          }
+
+          .l-hero::before {
+            width: 420px;
+            height: 420px;
+          }
+
+          .l-h1 {
+            font-size: clamp(34px, 8vw, 58px);
+          }
+
+          .l-subtitle {
+            font-size: 15px;
+            margin-bottom: 28px;
+          }
+
+          .l-code-wrap {
+            margin-top: 40px;
+          }
+
+          .l-stats-inner,
+          .l-section,
+          .l-cta-inner {
+            padding-left: 1rem;
+            padding-right: 1rem;
+          }
+
+          .l-features,
+          .l-apps-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .l-feature,
+          .l-app-card {
+            padding: 22px;
+          }
+
+          .l-flow {
+            grid-template-columns: 1fr;
+            gap: 22px;
+          }
+
+          .l-flow-step:not(:last-child)::after {
+            display: none;
+          }
+
+          .btn-hero,
+          .btn-hero-ghost {
+            width: 100%;
+            justify-content: center;
+          }
+
+          .l-hero-actions,
+          .l-cta .l-cta-inner > div:last-child {
+            flex-direction: column;
+          }
+
+          .l-meta {
+            flex-wrap: wrap;
+            gap: 10px;
+          }
+        }
+
         @media (max-width: 640px) {
           .l-nav-links { display: none; }
-          .l-flow { grid-template-columns: 1fr; gap: 24px; }
-          .l-flow-step:not(:last-child)::after { display: none; }
           .l-footer-inner { flex-direction: column; text-align: center; }
+          .l-logo img { height: 26px; }
+          .l-logo-text,
+          .l-logo-accent { font-size: 15px; }
+          .l-nav-badge { display: none; }
+          .btn-ghost { padding: 6px 12px; }
+          .btn-primary { padding: 7px 14px; }
         }
       `}</style>
 

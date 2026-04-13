@@ -201,6 +201,69 @@ for each row
 execute function public.sync_user_profile_details_from_auth();
 ```
 
+## Supabase Email Templates
+
+Use these HTML files for the matching Supabase Auth email templates. They all use the Zuup logo and dark coral theme.
+
+- [supabase/templates/invite.html](supabase/templates/invite.html)
+- [supabase/templates/confirmation.html](supabase/templates/confirmation.html)
+- [supabase/templates/magic_link.html](supabase/templates/magic_link.html)
+- [supabase/templates/email_change.html](supabase/templates/email_change.html)
+- [supabase/templates/recovery.html](supabase/templates/recovery.html)
+- [supabase/templates/reauthentication.html](supabase/templates/reauthentication.html)
+- [supabase/templates/password_changed_notification.html](supabase/templates/password_changed_notification.html)
+- [supabase/templates/email_changed_notification.html](supabase/templates/email_changed_notification.html)
+- [supabase/templates/phone_changed_notification.html](supabase/templates/phone_changed_notification.html)
+- [supabase/templates/identity_linked_notification.html](supabase/templates/identity_linked_notification.html)
+- [supabase/templates/identity_unlinked_notification.html](supabase/templates/identity_unlinked_notification.html)
+- [supabase/templates/mfa_factor_enrolled_notification.html](supabase/templates/mfa_factor_enrolled_notification.html)
+- [supabase/templates/mfa_factor_unenrolled_notification.html](supabase/templates/mfa_factor_unenrolled_notification.html)
+
+For local Supabase dev, wire them in `supabase/config.toml` like this:
+
+```toml
+[auth.email.template.invite]
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.confirmation]
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.magic_link]
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.email_change]
+content_path = "./supabase/templates/email_change.html"
+
+[auth.email.template.recovery]
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.reauthentication]
+content_path = "./supabase/templates/reauthentication.html"
+
+[auth.email.notification.password_changed]
+content_path = "./supabase/templates/password_changed_notification.html"
+
+[auth.email.notification.email_changed]
+content_path = "./supabase/templates/email_changed_notification.html"
+
+[auth.email.notification.phone_changed]
+content_path = "./supabase/templates/phone_changed_notification.html"
+
+[auth.email.notification.identity_linked]
+content_path = "./supabase/templates/identity_linked_notification.html"
+
+[auth.email.notification.identity_unlinked]
+content_path = "./supabase/templates/identity_unlinked_notification.html"
+
+[auth.email.notification.mfa_factor_enrolled]
+content_path = "./supabase/templates/mfa_factor_enrolled_notification.html"
+
+[auth.email.notification.mfa_factor_unenrolled]
+content_path = "./supabase/templates/mfa_factor_unenrolled_notification.html"
+```
+
+Hosted Supabase projects can paste the same HTML into the Dashboard email template editor.
+
 ## Environment Variables (Vercel)
 
 ```env

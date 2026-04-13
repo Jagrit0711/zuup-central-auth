@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#0d0f14;font-family:Inter,Arial,sans-serif;color:#e8eaf0;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0d0f14;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" style="max-width:640px;background:#111318;border:1px solid rgba(255,255,255,0.08);border-radius:24px;overflow:hidden;">
+            <tr>
+              <td style="padding:28px 28px 0;text-align:left;">
+                <img src="https://raw.githubusercontent.com/Jagrit0711/zuup-main/refs/heads/main/public/lovable-uploads/b44b8051-6117-4b37-999d-014c4c33dd13.png" alt="Zuup" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;border-radius:10px;" />
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 28px 8px;">
+                <div style="display:inline-block;padding:6px 12px;border-radius:999px;background:rgba(232,66,90,0.12);border:1px solid rgba(232,66,90,0.25);color:#f4728f;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Authentication</div>
+                <h1 style="margin:16px 0 10px;font-size:30px;line-height:1.1;color:#f8fafc;">You’ve been invited to Zuup</h1>
+                <p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#9ca3af;">An account invitation was sent to <strong style="color:#e8eaf0;">{{ .Email }}</strong>. Accept the invite to create your Zuup account and join the ecosystem.</p>
+                <p style="margin:0 0 28px;">
+                  <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:linear-gradient(135deg,#e8425a,#f06080);color:#ffffff;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:12px;">Accept invitation</a>
+                </p>
+                <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#6b7280;">If the button doesn’t work, paste this link into your browser:</p>
+                <p style="margin:0 0 20px;font-size:12px;line-height:1.6;word-break:break-all;color:#9ca3af;">{{ .ConfirmationURL }}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px 28px;border-top:1px solid rgba(255,255,255,0.06);font-size:12px;line-height:1.6;color:#6b7280;">
+                Sent by Zuup Auth · Keep this email secure.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
