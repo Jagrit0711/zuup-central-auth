@@ -8,13 +8,45 @@ import {
 
 const SECTIONS = [
   { id: "overview", label: "Overview" },
+  { id: "zuup-apps", label: "Zuup Apps" },
   { id: "quickstart", label: "Quickstart" },
   { id: "pkce", label: "PKCE Flow" },
   { id: "scopes", label: "Scopes" },
   { id: "endpoints", label: "Endpoints" },
+  { id: "profile-fields", label: "Profile Fields" },
   { id: "register", label: "Register an App" },
   { id: "examples", label: "Code Examples" },
   { id: "errors", label: "Error Reference" },
+];
+
+const FIRST_PARTY_APPS = [
+  "https://order.zuup.dev",
+  "https://time.zuup.dev",
+  "https://code.zuup.dev",
+  "https://watch.zuup.dev",
+  "https://zuup.dev",
+  "https://giza.zuup.dev",
+  "https://zuup.dev/schools",
+];
+
+const PROFILE_FIELDS = [
+  { key: "full_name", desc: "User first name / display first name" },
+  { key: "last_name", desc: "User last name" },
+  { key: "username", desc: "Public username" },
+  { key: "country", desc: "Mailing country" },
+  { key: "phone", desc: "Local phone number only" },
+  { key: "phone_country_code", desc: "Dial prefix selected by user" },
+  { key: "full_phone", desc: "Composed dial code + phone value" },
+  { key: "address_line1", desc: "Mailing address primary line" },
+  { key: "address_line2", desc: "Mailing address secondary line (optional)" },
+  { key: "city", desc: "City" },
+  { key: "state_region", desc: "State / province / region" },
+  { key: "postal_code", desc: "ZIP or postal code" },
+  { key: "mailing_address", desc: "Nested object mirror of address fields" },
+  { key: "avatar_url", desc: "Profile avatar image URL" },
+  { key: "cover_image_url", desc: "Profile cover image URL" },
+  { key: "gallery_images", desc: "Array of extra profile image URLs" },
+  { key: "security_alerts_enabled", desc: "Toggle for login/security alert emails" },
 ];
 
 const SCOPES = [
@@ -31,9 +63,10 @@ const ENDPOINTS = [
   { method: "GET", path: "https://auth.zuup.dev/authorize", desc: "Initiate authorization. Redirects to login/consent." },
   { method: "POST", path: "https://auth.zuup.dev/api/oauth/token", desc: "Exchange authorization code for access + refresh tokens." },
   { method: "GET", path: "https://auth.zuup.dev/api/oauth/userinfo", desc: "Fetch the authenticated user's profile (Bearer token)." },
-  { method: "POST", path: "/revoke", desc: "Revoke an access or refresh token." },
-  { method: "GET", path: "/.well-known/openid-configuration", desc: "OIDC discovery document." },
-  { method: "GET", path: "/.well-known/jwks.json", desc: "JSON Web Key Set for token verification." },
+  { method: "POST", path: "https://auth.zuup.dev/api/oauth/validate-request", desc: "Validate OAuth request payload before consent." },
+  { method: "POST", path: "https://auth.zuup.dev/api/oauth/register-client", desc: "Register an OAuth client from dashboard/dev tab." },
+  { method: "GET", path: "https://qnapwukqhybziduhzpow.supabase.co/auth/v1/.well-known/openid-configuration", desc: "OIDC discovery document." },
+  { method: "GET", path: "https://qnapwukqhybziduhzpow.supabase.co/auth/v1/.well-known/jwks.json", desc: "JSON Web Key Set for token verification." },
 ];
 
 const ERRORS = [
@@ -480,6 +513,28 @@ export default function Docs() {
             </p>
           </section>
 
+          <section className="docs-section" id="zuup-apps">
+            <div className="docs-section-tag">Ecosystem</div>
+            <h2 className="docs-h2">Official Zuup Apps</h2>
+            <p className="docs-lead">These first-party apps are already aligned with Zuup Auth and can be used as integration references.</p>
+            <table className="docs-table">
+              <thead>
+                <tr>
+                  <th>App URL</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {FIRST_PARTY_APPS.map((appUrl) => (
+                  <tr key={appUrl}>
+                    <td>{appUrl}</td>
+                    <td style={{ fontSize: 13 }}>Use this domain in your registered redirect URI allowlist if your callback lives here.</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
           {/* Quickstart */}
           <section className="docs-section" id="quickstart">
             <div className="docs-section-tag">Getting started</div>
@@ -586,6 +641,31 @@ grant_type=authorization_code
             </table>
             <h3 className="docs-h3">OIDC Discovery</h3>
             <p className="docs-p">The OpenID Connect discovery document is available at <span className="ic">/.well-known/openid-configuration</span> and contains all endpoint URLs, supported scopes, and signing key information.</p>
+          </section>
+
+          <section className="docs-section" id="profile-fields">
+            <div className="docs-section-tag">Account Data</div>
+            <h2 className="docs-h2">Profile Metadata Contract</h2>
+            <p className="docs-lead">Profile data is written into Supabase Auth user metadata and read from the same source. No separate global profile table is required.</p>
+            <table className="docs-table">
+              <thead>
+                <tr>
+                  <th>Metadata key</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {PROFILE_FIELDS.map((field) => (
+                  <tr key={field.key}>
+                    <td>{field.key}</td>
+                    <td style={{ fontSize: 13 }}>{field.desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Alert type="info">
+              Email updates are handled through the Auth user email update flow. Users must confirm new email addresses from their inbox before the change becomes active.
+            </Alert>
           </section>
 
           {/* Register */}

@@ -1,50 +1,59 @@
 # Zuup Auth
 
-Zuup Auth is the central OAuth and account system for Zuup apps.
+Zuup Auth is the centralized identity, profile, and OAuth service for Zuup products.
 
-Client apps should integrate with **auth.zuup.dev** endpoints. Zuup Auth handles auth flows and server-side token logic.
+## Official Domains
 
-## Integration Endpoints
+- https://auth.zuup.dev
+- https://order.zuup.dev
+- https://time.zuup.dev
+- https://code.zuup.dev
+- https://watch.zuup.dev
+- https://zuup.dev
+- https://giza.zuup.dev
+- https://zuup.dev/schools
 
-- Authorize: `https://auth.zuup.dev/authorize`
-- Token: `https://auth.zuup.dev/api/oauth/token`
-- Userinfo: `https://auth.zuup.dev/api/oauth/userinfo`
+## Core Endpoints
 
-Client callback example:
+- Authorize: https://auth.zuup.dev/authorize
+- Token: https://auth.zuup.dev/api/oauth/token
+- Userinfo: https://auth.zuup.dev/api/oauth/userinfo
+- Validate OAuth request: https://auth.zuup.dev/api/oauth/validate-request
+- Register OAuth app: https://auth.zuup.dev/api/oauth/register-client
 
-- `https://watch.zuup.dev/auth/zuup/callback`
+## Auth and Profile Data Model
 
-## Architecture
+Primary source of truth is Supabase Auth users.
 
-- Frontend: React + TypeScript + Vite
-- Auth backend/API: Vercel serverless routes under `api/oauth/*`
-- Account security/API: Vercel serverless routes under `api/account/*`
-- Identity + storage: Supabase (Auth + Postgres)
+- Account identity and session: auth.users
+- Email/password, OTP, and recovery: Supabase Auth
+- Profile fields: auth.users.raw_user_meta_data
 
-## Account Features
+Profile metadata keys currently used by app UI:
 
-- Persistent session behavior configured for reload-safe sign in.
-- Password login and passwordless 6-digit email code login on login/signup and OAuth authorize.
-- Security alert email API that can include IP, browser, app, and login method details.
-- Security tab supports:
-	- TOTP authenticator enrollment/verification/disable
-	- backup code generation
-	- login alert email preference toggle
+- full_name
+- last_name
+- username
+- country
+- phone
+- phone_country_code
+- full_phone
+- address_line1
+- address_line2
+- city
+- state_region
+- postal_code
+- mailing_address (object)
+- avatar_url
+- cover_image_url
+- gallery_images (array)
+- security_alerts_enabled
 
-## Required Supabase Tables
+## Required Tables for OAuth Server Routes
 
-Run this SQL in Supabase:
+Run this SQL in Supabase (public schema):
 
 ```sql
-create table if not exists public.zuup_users (
-	id uuid primary key,
-	email text not null unique,
-	user_metadata jsonb not null default '{}'::jsonb,
-	created_at timestamptz not null default now(),
-	updated_at timestamptz not null default now(),
-	last_sign_in_at timestamptz
-);
-
 create table if not exists public.oauth_clients (
 	client_id text primary key,
 	client_secret text not null,
@@ -81,9 +90,118 @@ create index if not exists oauth_authorization_codes_used_idx
 	on public.oauth_authorization_codes (used);
 ```
 
-## Auth Project Env (Vercel)
+## SQL for Mailing Address and Extra Profile Fields
 
-Set these env vars on the `auth.zuup.dev` project:
+Supabase manages auth.users directly, so you should not alter auth.users table structure for custom columns.
+
+Use metadata keys above for app logic. If you also want a queryable SQL mirror table for analytics/admin/reporting, run:
+
+```sql
+create table if not exists public.user_profile_details (
+	user_id uuid primary key references auth.users(id) on delete cascade,
+	email text,
+	full_name text,
+	last_name text,
+	username text,
+	country text,
+	phone text,
+	phone_country_code text,
+	full_phone text,
+	address_line1 text,
+	address_line2 text,
+	city text,
+	state_region text,
+	postal_code text,
+	mailing_address jsonb not null default '{}'::jsonb,
+	avatar_url text,
+	cover_image_url text,
+	gallery_images jsonb not null default '[]'::jsonb,
+	updated_at timestamptz not null default now()
+);
+
+create or replace function public.sync_user_profile_details_from_auth()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+	insert into public.user_profile_details (
+		user_id,
+		email,
+		full_name,
+		last_name,
+		username,
+		country,
+		phone,
+		phone_country_code,
+		full_phone,
+		address_line1,
+		address_line2,
+		city,
+		state_region,
+		postal_code,
+		mailing_address,
+		avatar_url,
+		cover_image_url,
+		gallery_images,
+		updated_at
+	) values (
+		new.id,
+		new.email,
+		coalesce(new.raw_user_meta_data->>'full_name', ''),
+		coalesce(new.raw_user_meta_data->>'last_name', ''),
+		coalesce(new.raw_user_meta_data->>'username', ''),
+		coalesce(new.raw_user_meta_data->>'country', ''),
+		coalesce(new.raw_user_meta_data->>'phone', ''),
+		coalesce(new.raw_user_meta_data->>'phone_country_code', ''),
+		coalesce(new.raw_user_meta_data->>'full_phone', ''),
+		coalesce(new.raw_user_meta_data->>'address_line1', ''),
+		coalesce(new.raw_user_meta_data->>'address_line2', ''),
+		coalesce(new.raw_user_meta_data->>'city', ''),
+		coalesce(new.raw_user_meta_data->>'state_region', ''),
+		coalesce(new.raw_user_meta_data->>'postal_code', ''),
+		coalesce(new.raw_user_meta_data->'mailing_address', '{}'::jsonb),
+		coalesce(new.raw_user_meta_data->>'avatar_url', ''),
+		coalesce(new.raw_user_meta_data->>'cover_image_url', ''),
+		coalesce(new.raw_user_meta_data->'gallery_images', '[]'::jsonb),
+		now()
+	)
+	on conflict (user_id) do update
+	set
+		email = excluded.email,
+		full_name = excluded.full_name,
+		last_name = excluded.last_name,
+		username = excluded.username,
+		country = excluded.country,
+		phone = excluded.phone,
+		phone_country_code = excluded.phone_country_code,
+		full_phone = excluded.full_phone,
+		address_line1 = excluded.address_line1,
+		address_line2 = excluded.address_line2,
+		city = excluded.city,
+		state_region = excluded.state_region,
+		postal_code = excluded.postal_code,
+		mailing_address = excluded.mailing_address,
+		avatar_url = excluded.avatar_url,
+		cover_image_url = excluded.cover_image_url,
+		gallery_images = excluded.gallery_images,
+		updated_at = now();
+
+	return new;
+end;
+$$;
+
+drop trigger if exists trg_sync_user_profile_details_from_auth on auth.users;
+
+create trigger trg_sync_user_profile_details_from_auth
+after insert or update of email, raw_user_meta_data
+on auth.users
+for each row
+execute function public.sync_user_profile_details_from_auth();
+```
+
+## Environment Variables (Vercel)
 
 ```env
 ZUUP_ISSUER=https://auth.zuup.dev
@@ -94,51 +212,10 @@ SUPABASE_SERVICE_ROLE_KEY=PUT_SUPABASE_SERVICE_ROLE_KEY_HERE
 
 ZUUP_OAUTH_CODES_TABLE=oauth_authorization_codes
 ZUUP_OAUTH_CLIENTS_TABLE=oauth_clients
-ZUUP_USERS_TABLE=zuup_users
-ZUUP_SESSION_SECRET=PUT_A_LONG_RANDOM_SESSION_SECRET_HERE
 
-# Optional: security alert email delivery
 RESEND_API_KEY=PUT_RESEND_KEY_HERE
 SECURITY_ALERT_FROM_EMAIL="Zuup Security <security@zuup.dev>"
 ```
-
-Notes:
-
-- For dynamic multi-app registration, do **not** set `ZUUP_CLIENT_ID`, `ZUUP_CLIENT_SECRET`, or `ZUUP_CLIENT_SECRETS_JSON`.
-- New apps are expected to be persisted to `oauth_clients`.
-- Passwordless 6-digit login/signup now uses Supabase Auth OTP again.
-- The app no longer depends on a custom SMTP account for login codes.
-
-## OAuth Flow (Recommended)
-
-1. App redirects user to `https://auth.zuup.dev/authorize` with OAuth params.
-2. Zuup Auth validates `client_id`, `redirect_uri`, scopes.
-3. User signs in and grants consent.
-4. Zuup Auth issues a short-lived auth code server-side.
-5. App backend exchanges code at `https://auth.zuup.dev/api/oauth/token`.
-6. Zuup Auth verifies PKCE + code and returns tokens.
-7. Client app calls `https://auth.zuup.dev/api/oauth/userinfo` with the bearer token.
-
-## Passwordless Email Code Flow
-
-1. User requests a 6-digit code from Supabase Auth, either directly from the app or through the legacy-compatible `/api/account/otp-request` proxy.
-2. Supabase sends the code through your configured Supabase Auth email provider.
-3. User enters the code in the 6-box OTP UI.
-4. Supabase verifies the code and returns the session.
-5. The app uses that session for login, profile, and sign-out.
-
-## Auto Sign-In Like Google
-
-- Zuup Auth keeps its own first-party session on `auth.zuup.dev`, so returning users should skip login on `/authorize` when their session is valid.
-- For client apps, store Zuup tokens server-side in secure, HTTP-only cookies and refresh through your backend.
-- Do not call Supabase `/auth/v1/user` with Zuup-issued access tokens; use Zuup `userinfo` endpoint.
-
-## Common Errors
-
-- `redirect_uri not registered`: callback URL mismatch against client allowlist.
-- `invalid_client`: unknown client_id or secret mismatch.
-- `invalid_grant`: auth code expired/used or PKCE mismatch.
-- `method_not_allowed`: app is calling token endpoint with GET instead of POST.
 
 ## Local Development
 
@@ -147,6 +224,13 @@ npm install
 npm run dev
 ```
 
+## Notes for Developers
+
+- Use OAuth Authorization Code flow with PKCE.
+- Keep token exchange on server side.
+- Keep sessions in secure HTTP-only cookies in client apps.
+- Email updates require inbox confirmation by Supabase Auth.
+
 ## Copyright
 
-Copyright © 2026 Zuup. Created by Jagrit Sachdev.
+Copyright (c) 2026 Zuup. Created by Jagrit Sachdev.

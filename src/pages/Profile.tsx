@@ -126,6 +126,35 @@ const COUNTRY_LIST = [
   "Other",
 ];
 
+const MOBILE_COUNTRY_CODES = [
+  "+1 (US/CA)",
+  "+44 (UK)",
+  "+61 (AU)",
+  "+49 (DE)",
+  "+33 (FR)",
+  "+91 (IN)",
+  "+81 (JP)",
+  "+65 (SG)",
+  "+971 (UAE)",
+  "+52 (MX)",
+  "+55 (BR)",
+  "+27 (ZA)",
+];
+
+const APP_SHOWCASE = [
+  { name: "Zuup", url: "https://zuup.dev" },
+  { name: "Zuup Buy", url: "https://order.zuup.dev" },
+  { name: "Zuup Time", url: "https://time.zuup.dev" },
+  { name: "Zuup Code", url: "https://code.zuup.dev" },
+  { name: "Zuup Watch", url: "https://watch.zuup.dev" },
+  { name: "Zuup Giza", url: "https://giza.zuup.dev" },
+  { name: "Zuup Schools", url: "https://zuup.dev/schools" },
+];
+
+function appPreviewUrl(url: string): string {
+  return `https://image.thum.io/get/width/1200/crop/700/noanimate/${encodeURIComponent(url)}`;
+}
+
 const REVOKED_CONNECTED_APPS_KEY = "zuup_revoked_connected_apps";
 
 function scopeToPermission(scope: string): string {
@@ -206,10 +235,20 @@ export default function Profile() {
   const [fullName, setFullName] = useState(user?.user_metadata?.full_name || user?.user_metadata?.name || "");
   const [lastName, setLastName] = useState(user?.user_metadata?.last_name || "");
   const [country, setCountry] = useState(user?.user_metadata?.country || "");
+  const [mobileCountryCode, setMobileCountryCode] = useState(user?.user_metadata?.phone_country_code || "+1 (US/CA)");
   const [phoneNumber, setPhoneNumber] = useState(user?.user_metadata?.phone || "");
+  const [addressLine1, setAddressLine1] = useState(user?.user_metadata?.address_line1 || "");
+  const [addressLine2, setAddressLine2] = useState(user?.user_metadata?.address_line2 || "");
+  const [city, setCity] = useState(user?.user_metadata?.city || "");
+  const [stateRegion, setStateRegion] = useState(user?.user_metadata?.state_region || "");
+  const [postalCode, setPostalCode] = useState(user?.user_metadata?.postal_code || "");
   const [username, setUsername] = useState(user?.user_metadata?.username || "");
   const [newEmail, setNewEmail] = useState(user?.email || "");
   const [avatarUrl, setAvatarUrl] = useState(user?.user_metadata?.avatar_url || "");
+  const [coverImageUrl, setCoverImageUrl] = useState(user?.user_metadata?.cover_image_url || "");
+  const [photoOne, setPhotoOne] = useState((user?.user_metadata?.gallery_images || [])[0] || "");
+  const [photoTwo, setPhotoTwo] = useState((user?.user_metadata?.gallery_images || [])[1] || "");
+  const [photoThree, setPhotoThree] = useState((user?.user_metadata?.gallery_images || [])[2] || "");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -291,10 +330,21 @@ export default function Profile() {
     setFullName(user?.user_metadata?.full_name || user?.user_metadata?.name || "");
     setLastName(user?.user_metadata?.last_name || "");
     setCountry(user?.user_metadata?.country || "");
+    setMobileCountryCode(user?.user_metadata?.phone_country_code || "+1 (US/CA)");
     setPhoneNumber(user?.user_metadata?.phone || "");
+    setAddressLine1(user?.user_metadata?.address_line1 || "");
+    setAddressLine2(user?.user_metadata?.address_line2 || "");
+    setCity(user?.user_metadata?.city || "");
+    setStateRegion(user?.user_metadata?.state_region || "");
+    setPostalCode(user?.user_metadata?.postal_code || "");
     setUsername(user?.user_metadata?.username || "");
     setNewEmail(user?.email || "");
     setAvatarUrl(user?.user_metadata?.avatar_url || "");
+    setCoverImageUrl(user?.user_metadata?.cover_image_url || "");
+    const galleryImages = Array.isArray(user?.user_metadata?.gallery_images) ? user?.user_metadata?.gallery_images : [];
+    setPhotoOne(galleryImages[0] || "");
+    setPhotoTwo(galleryImages[1] || "");
+    setPhotoThree(galleryImages[2] || "");
   }, [user?.id]);
 
   useEffect(() => {
@@ -326,13 +376,10 @@ export default function Profile() {
   const displayName = fullName || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "User";
   const avatarInitial = displayName[0]?.toUpperCase() || "U";
   const completion = useMemo(() => {
-    let score = 0;
-    if (fullName) score += 25;
-    if (lastName) score += 25;
-    if (phoneNumber) score += 25;
-    if (avatarUrl) score += 25;
-    return score;
-  }, [fullName, lastName, phoneNumber, avatarUrl]);
+    const fields = [fullName, lastName, phoneNumber, country, addressLine1, city, postalCode, avatarUrl];
+    const filled = fields.filter((value) => String(value || "").trim().length > 0).length;
+    return Math.round((filled / fields.length) * 100);
+  }, [fullName, lastName, phoneNumber, country, addressLine1, city, postalCode, avatarUrl]);
 
   const sessionInfo = useMemo(() => {
     const parsed = parseDevice(navigator.userAgent);
@@ -532,7 +579,17 @@ export default function Profile() {
       const normalizedLastName = String(lastName || "").trim();
       const normalizedCountry = String(country || "").trim();
       const normalizedPhone = String(phoneNumber || "").trim();
+      const normalizedAddressLine1 = String(addressLine1 || "").trim();
+      const normalizedAddressLine2 = String(addressLine2 || "").trim();
+      const normalizedCity = String(city || "").trim();
+      const normalizedStateRegion = String(stateRegion || "").trim();
+      const normalizedPostalCode = String(postalCode || "").trim();
+      const normalizedCoverImage = String(coverImageUrl || "").trim();
+      const galleryImages = [photoOne, photoTwo, photoThree]
+        .map((photo) => String(photo || "").trim())
+        .filter(Boolean);
       const combinedName = `${normalizedFullName} ${normalizedLastName}`.trim();
+      const fullPhone = normalizedPhone ? `${mobileCountryCode} ${normalizedPhone}`.trim() : "";
 
       await updateProfile({
         full_name: normalizedFullName,
@@ -542,8 +599,25 @@ export default function Profile() {
         name: combinedName || normalizedFullName,
         phone: normalizedPhone,
         phone_number: normalizedPhone,
+        phone_country_code: mobileCountryCode,
+        full_phone: fullPhone,
+        address_line1: normalizedAddressLine1,
+        address_line2: normalizedAddressLine2,
+        city: normalizedCity,
+        state_region: normalizedStateRegion,
+        postal_code: normalizedPostalCode,
+        mailing_address: {
+          line1: normalizedAddressLine1,
+          line2: normalizedAddressLine2,
+          city: normalizedCity,
+          state_region: normalizedStateRegion,
+          postal_code: normalizedPostalCode,
+          country: normalizedCountry,
+        },
         username,
         avatar_url: avatarUrl,
+        cover_image_url: normalizedCoverImage,
+        gallery_images: galleryImages,
       });
 
       if (newEmail !== user?.email) {
@@ -749,22 +823,40 @@ export default function Profile() {
               </div>
 
               <div style={card}>
-                <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600 }}>Zuup Apps</p>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-                  {BUILTIN_APPS.map((app) => (
+                <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600 }}>Zuup Apps Network</p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+                  {APP_SHOWCASE.map((app) => (
                     <a
-                      key={app.client_id}
-                      href={app.homepage_url}
+                      key={app.url}
+                      href={app.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 12, background: "rgba(255,255,255,0.02)", color: "#e8eaf0" }}
+                      style={{ textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, overflow: "hidden", background: "rgba(255,255,255,0.02)", color: "#e8eaf0" }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <Globe size={14} style={{ color: "#e8425a" }} />
+                      <img
+                        src={appPreviewUrl(app.url)}
+                        alt={app.name}
+                        style={{ width: "100%", height: 118, objectFit: "cover", display: "block", background: "#161a22" }}
+                      />
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: 10 }}>
                         <span style={{ fontSize: 13, fontWeight: 600 }}>{app.name}</span>
+                        <Globe size={14} style={{ color: "#e8425a" }} />
+                      </div>
+                      <div style={{ padding: "0 10px 10px", color: "#9ca3af", fontSize: 11, wordBreak: "break-all" }}>
+                        {app.url.replace("https://", "")}
                       </div>
                     </a>
                   ))}
+                </div>
+              </div>
+
+              <div style={card}>
+                <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600 }}>Saved Contact Snapshot</p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <CopyRow label="Country" value={country || "Not set"} />
+                  <CopyRow label="Phone" value={(phoneNumber ? `${mobileCountryCode} ${phoneNumber}` : "Not set")} />
+                  <CopyRow label="City" value={city || "Not set"} />
+                  <CopyRow label="Postal" value={postalCode || "Not set"} />
                 </div>
               </div>
             </>
@@ -837,9 +929,88 @@ export default function Profile() {
                 </div>
 
                 <div style={{ marginTop: 12 }}>
+                  <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Mobile country code</Label>
+                  <select
+                    value={mobileCountryCode}
+                    onChange={(e) => setMobileCountryCode(e.target.value)}
+                    style={{
+                      width: "100%",
+                      height: 40,
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.14)",
+                      background: "rgba(255,255,255,0.03)",
+                      color: "#e8eaf0",
+                      padding: "0 10px",
+                      outline: "none",
+                    }}
+                  >
+                    {MOBILE_COUNTRY_CODES.map((item) => (
+                      <option key={item} value={item} style={{ color: "#111827" }}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ marginTop: 12 }}>
                   <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Phone number</Label>
                   <Input value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+1 555 000 0000" className="bg-secondary/50 border-border/60" />
                 </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Mailing address line 1</Label>
+                  <Input value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} placeholder="Street and house number" className="bg-secondary/50 border-border/60" />
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Mailing address line 2</Label>
+                  <Input value={addressLine2} onChange={(e) => setAddressLine2(e.target.value)} placeholder="Apartment, suite, landmark (optional)" className="bg-secondary/50 border-border/60" />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+                  <div>
+                    <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>City</Label>
+                    <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" className="bg-secondary/50 border-border/60" />
+                  </div>
+                  <div>
+                    <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>State / region</Label>
+                    <Input value={stateRegion} onChange={(e) => setStateRegion(e.target.value)} placeholder="State" className="bg-secondary/50 border-border/60" />
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Postal code</Label>
+                  <Input value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder="Postal / ZIP code" className="bg-secondary/50 border-border/60" />
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <p style={{ margin: "0 0 10px", fontWeight: 600, fontSize: 14 }}>Images</p>
+                  <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Cover image URL</Label>
+                  <Input value={coverImageUrl} onChange={(e) => setCoverImageUrl(e.target.value)} placeholder="https://..." className="bg-secondary/50 border-border/60" />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginTop: 12 }}>
+                  <div>
+                    <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Extra photo URL 1</Label>
+                    <Input value={photoOne} onChange={(e) => setPhotoOne(e.target.value)} placeholder="https://..." className="bg-secondary/50 border-border/60" />
+                  </div>
+                  <div>
+                    <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Extra photo URL 2</Label>
+                    <Input value={photoTwo} onChange={(e) => setPhotoTwo(e.target.value)} placeholder="https://..." className="bg-secondary/50 border-border/60" />
+                  </div>
+                  <div>
+                    <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Extra photo URL 3</Label>
+                    <Input value={photoThree} onChange={(e) => setPhotoThree(e.target.value)} placeholder="https://..." className="bg-secondary/50 border-border/60" />
+                  </div>
+                </div>
+
+                {(coverImageUrl || photoOne || photoTwo || photoThree) && (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginTop: 12 }}>
+                    {[coverImageUrl, photoOne, photoTwo, photoThree].filter(Boolean).map((photo, idx) => (
+                      <img key={`${photo}-${idx}`} src={photo} alt={`profile-media-${idx + 1}`} style={{ width: "100%", height: 86, objectFit: "cover", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "#111318" }} />
+                    ))}
+                  </div>
+                )}
 
                 <div style={{ marginTop: 12 }}>
                   <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Email</Label>
