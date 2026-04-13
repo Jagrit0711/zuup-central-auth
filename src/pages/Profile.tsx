@@ -186,8 +186,8 @@ export default function Profile() {
   const [devMode, setDevMode] = useState<boolean>(() => localStorage.getItem("zuup_dev_mode") === "true");
 
   const [fullName, setFullName] = useState(user?.user_metadata?.full_name || user?.user_metadata?.name || "");
-  const [lastName, setLastName] = useState(user?.user_metadata?.last_name || "user");
-  const [phoneNumber, setPhoneNumber] = useState(user?.user_metadata?.phone || "+1 (555) 123-4567");
+  const [lastName, setLastName] = useState(user?.user_metadata?.last_name || "");
+  const [phoneNumber, setPhoneNumber] = useState(user?.user_metadata?.phone || "");
   const [username, setUsername] = useState(user?.user_metadata?.username || "");
   const [newEmail, setNewEmail] = useState(user?.email || "");
   const [avatarUrl, setAvatarUrl] = useState(user?.user_metadata?.avatar_url || "");
@@ -270,8 +270,8 @@ export default function Profile() {
 
   useEffect(() => {
     setFullName(user?.user_metadata?.full_name || user?.user_metadata?.name || "");
-    setLastName(user?.user_metadata?.last_name || "user");
-    setPhoneNumber(user?.user_metadata?.phone || "+1 (555) 123-4567");
+    setLastName(user?.user_metadata?.last_name || "");
+    setPhoneNumber(user?.user_metadata?.phone || "");
     setUsername(user?.user_metadata?.username || "");
     setNewEmail(user?.email || "");
     setAvatarUrl(user?.user_metadata?.avatar_url || "");
@@ -778,17 +778,17 @@ export default function Profile() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <div>
                     <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>First name</Label>
-                    <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="unknown" className="bg-secondary/50 border-border/60" />
+                    <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="First name" className="bg-secondary/50 border-border/60" />
                   </div>
                   <div>
                     <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Last name</Label>
-                    <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="user" className="bg-secondary/50 border-border/60" />
+                    <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name" className="bg-secondary/50 border-border/60" />
                   </div>
                 </div>
 
                 <div style={{ marginTop: 12 }}>
                   <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Phone number</Label>
-                  <Input value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="bg-secondary/50 border-border/60" />
+                  <Input value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+1 555 000 0000" className="bg-secondary/50 border-border/60" />
                 </div>
 
                 <div style={{ marginTop: 12 }}>

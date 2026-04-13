@@ -13,7 +13,7 @@ export default function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { updatePassword } = useAuth();
+  const { user, updatePassword } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -36,6 +36,18 @@ export default function ResetPassword() {
     setLoading(true);
     try {
       await updatePassword(password);
+      if (user?.email) {
+        await fetch("/api/account/security-alert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event: "password_changed",
+            method: "account_recovery",
+            email: user.email,
+            app: "auth.zuup.dev",
+          }),
+        }).catch(() => {});
+      }
       toast.success("Password updated successfully!");
       navigate("/login");
     } catch (err: any) {

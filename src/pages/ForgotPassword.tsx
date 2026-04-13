@@ -19,6 +19,16 @@ export default function ForgotPassword() {
     setLoading(true);
     try {
       await resetPassword(email);
+      await fetch("/api/account/security-alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event: "password_reset_requested",
+          method: "email_link",
+          email,
+          app: "auth.zuup.dev",
+        }),
+      }).catch(() => {});
       setSent(true);
       toast.success("Reset link sent!");
     } catch (err: any) {

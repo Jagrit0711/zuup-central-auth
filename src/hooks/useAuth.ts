@@ -29,7 +29,6 @@ export function useAuth() {
 
     const start = async () => {
       try {
-        await fetch("/api/account/logout", { method: "POST", credentials: "include" }).catch(() => {});
         if (cancelled) return;
 
         const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
@@ -64,7 +63,6 @@ export function useAuth() {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    await fetch("/api/account/logout", { method: "POST", credentials: "include" }).catch(() => {});
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     return data;
@@ -104,8 +102,6 @@ export function useAuth() {
   };
 
   const verifyEmailCode = async (email: string, token: string, intent: EmailCodeIntent = "login") => {
-    await fetch("/api/account/logout", { method: "POST", credentials: "include" }).catch(() => {});
-
     const { data, error } = await supabase.auth.verifyOtp({
       email,
       token,

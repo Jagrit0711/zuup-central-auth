@@ -93,6 +93,7 @@ export default function Signup() {
         throw new Error("Password must be at least 8 characters");
       }
       await signUp(email, password, { full_name: fullName });
+      await notifySecurityLogin("email_password");
       toast.success("Check your email to confirm your account!");
     } catch (err: any) {
       toast.error(err.message || "Signup failed");
