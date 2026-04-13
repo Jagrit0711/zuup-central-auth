@@ -8,12 +8,31 @@ import {
   generateOpaqueToken,
 } from "./_utils.js";
 
+const DEFAULT_SUPABASE_URL = "https://qnapwukqhybziduhzpow.supabase.co";
+
 function getIssuer() {
   return process.env.ZUUP_ISSUER || "https://auth.zuup.dev";
 }
 
 function getSigningSecret() {
   return process.env.ZUUP_OAUTH_SIGNING_SECRET || process.env.ZUUP_CLIENT_SECRET || "";
+}
+
+async function fetchUserProfile(userId) {
+  const supabaseUrl = (process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/+$/, "");
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey || !userId) return null;
+
+  const url = `${supabaseUrl}/auth/v1/admin/users/${userId}`;
+  const res = await fetch(url, {
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+    },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data?.user || data || null;
 }
 
 export default async function handler(req, res) {
@@ -86,6 +105,8 @@ export default async function handler(req, res) {
 
   const now = Math.floor(Date.now() / 1000);
   const expiresIn = 3600;
+  const profile = await fetchUserProfile(authCode.user_id);
+  const userMeta = profile?.user_metadata || {};
   const payload = {
     iss: getIssuer(),
     sub: authCode.user_id,
@@ -94,6 +115,10 @@ export default async function handler(req, res) {
     exp: now + expiresIn,
     scope: (authCode.scopes || []).join(" "),
     jti: generateOpaqueToken(12),
+    email: profile?.email || null,
+    name: userMeta.full_name || null,
+    preferred_username: userMeta.username || null,
+    picture: userMeta.avatar_url || null,
   };
 
   const accessToken = signJwtHs256(payload, signingSecret);

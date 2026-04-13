@@ -47,6 +47,14 @@ function base64UrlEncode(input) {
     .replace(/\//g, "_");
 }
 
+function base64UrlDecode(input) {
+  const normalized = input
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(input.length / 4) * 4, "=");
+  return Buffer.from(normalized, "base64").toString("utf8");
+}
+
 export function sha256Base64Url(input) {
   const digest = crypto.createHash("sha256").update(input).digest();
   return base64UrlEncode(digest);
@@ -66,6 +74,37 @@ export function signJwtHs256(payload, secret) {
     .replace(/\//g, "_");
 
   return `${unsigned}.${signature}`;
+}
+
+export function verifyJwtHs256(token, secret) {
+  if (!token || typeof token !== "string") return { ok: false, error: "invalid_token" };
+  const parts = token.split(".");
+  if (parts.length !== 3) return { ok: false, error: "invalid_token" };
+
+  const [encodedHeader, encodedPayload, encodedSig] = parts;
+  const unsigned = `${encodedHeader}.${encodedPayload}`;
+  const expectedSig = crypto
+    .createHmac("sha256", secret)
+    .update(unsigned)
+    .digest("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+
+  if (expectedSig !== encodedSig) {
+    return { ok: false, error: "invalid_signature" };
+  }
+
+  try {
+    const payload = JSON.parse(base64UrlDecode(encodedPayload));
+    const now = Math.floor(Date.now() / 1000);
+    if (payload?.exp && now > payload.exp) {
+      return { ok: false, error: "token_expired" };
+    }
+    return { ok: true, payload };
+  } catch {
+    return { ok: false, error: "invalid_payload" };
+  }
 }
 
 function getClientsTableConfig() {
