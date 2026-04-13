@@ -12,6 +12,7 @@ import { LogIn, Eye, EyeOff, Loader2 } from "lucide-react";
 import { logAuditEvent } from "@/lib/oauth";
 
 type SignInMode = "password" | "code";
+type AuthStep = "email" | "credentials" | "mfa";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -21,11 +22,13 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
   const [signInMode, setSignInMode] = useState<SignInMode>("password");
+  const [authStep, setAuthStep] = useState<AuthStep>("email");
   const [codeSent, setCodeSent] = useState(false);
   const [mfaRequired, setMfaRequired] = useState(false);
   const [mfaCode, setMfaCode] = useState("");
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+  const [mfaMethod, setMfaMethod] = useState<"totp" | "webauthn" | null>(null);
   const [pendingMethod, setPendingMethod] = useState<"email_password" | "email_code" | null>(null);
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const codeSubmitInFlightRef = useRef(false);
@@ -51,12 +54,13 @@ export default function Login() {
   };
 
   useEffect(() => {
+    if (authStep !== "credentials") return;
     if (signInMode !== "code") return;
     if (mfaRequired) return;
     if (!codeSent || loading) return;
     if (code.length !== 6) return;
     void handleCodeSubmit();
-  }, [code, codeSent, loading, mfaRequired, signInMode]);
+  }, [authStep, code, codeSent, loading, mfaRequired, signInMode]);
 
   const finalizeSignIn = async (method: "email_password" | "email_code", userId?: string) => {
     logAuditEvent({ type: "login", user_id: userId, details: { method } });
@@ -72,7 +76,7 @@ export default function Login() {
     navigate("/profile");
   };
 
-  const maybeStartMfa = async () => {
+  const maybeStartMfa = async (method: "email_password" | "email_code", userId?: string) => {
     const factorsResult = await supabase.auth.mfa.listFactors();
     if (factorsResult.error) throw factorsResult.error;
 
@@ -83,12 +87,26 @@ export default function Login() {
     const verifiedFactor = factors.find((factor: any) => factor?.status === "verified");
     if (!verifiedFactor?.id) return false;
 
+    const factorType = String(verifiedFactor.factor_type || "").toLowerCase();
+    if (factorType === "webauthn") {
+      const webauthnApi = (supabase.auth.mfa as any)?.webauthn;
+      if (!webauthnApi?.authenticate) {
+        throw new Error("Passkey login is not available in this browser/project");
+      }
+      const result = await webauthnApi.authenticate({ factorId: verifiedFactor.id });
+      if (result?.error) throw result.error;
+      await finalizeSignIn(method, userId);
+      return true;
+    }
+
     const challenge = await supabase.auth.mfa.challenge({ factorId: verifiedFactor.id } as any);
     if (challenge.error) throw challenge.error;
 
     setMfaFactorId(verifiedFactor.id);
     setMfaChallengeId(challenge.data.id);
+    setMfaMethod("totp");
     setMfaRequired(true);
+    setAuthStep("mfa");
     toast.message("Enter your 2FA authenticator code");
     return true;
   };
@@ -120,6 +138,7 @@ export default function Login() {
       setMfaCode("");
       setMfaFactorId(null);
       setMfaChallengeId(null);
+      setMfaMethod(null);
       setPendingMethod(null);
       setPendingUserId(null);
 
@@ -148,7 +167,7 @@ export default function Login() {
       setCode("");
       setCodeSent(false);
 
-      const mfaStarted = await maybeStartMfa();
+      const mfaStarted = await maybeStartMfa(method, data.user?.id || data.session?.user?.id || undefined);
       if (mfaStarted) {
         setPendingMethod(method);
         setPendingUserId(data.user?.id || data.session?.user?.id || null);
@@ -167,6 +186,14 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (authStep === "email") {
+      handleContinueFromEmail();
+      return;
+    }
+    if (authStep === "mfa") {
+      await handleMfaVerify();
+      return;
+    }
     if (signInMode === "code") {
       await handleCodeSubmit();
       return;
@@ -177,7 +204,7 @@ export default function Login() {
       const data = await signIn(email, password);
       const method: "email_password" = "email_password";
 
-      const mfaStarted = await maybeStartMfa();
+      const mfaStarted = await maybeStartMfa(method, data.user?.id || data.session?.user?.id || undefined);
       if (mfaStarted) {
         setPendingMethod(method);
         setPendingUserId(data.user?.id || data.session?.user?.id || null);
@@ -210,6 +237,28 @@ export default function Login() {
     }
   };
 
+  const handleContinueFromEmail = () => {
+    if (!email.trim()) {
+      toast.error("Enter your email first");
+      return;
+    }
+    setAuthStep("credentials");
+  };
+
+  const handleBackToEmail = () => {
+    setAuthStep("email");
+    setCode("");
+    setCodeSent(false);
+    setPassword("");
+    setMfaRequired(false);
+    setMfaCode("");
+    setMfaFactorId(null);
+    setMfaChallengeId(null);
+    setMfaMethod(null);
+    setPendingMethod(null);
+    setPendingUserId(null);
+  };
+
   return (
     <AuthLayout>
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -219,93 +268,104 @@ export default function Login() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex rounded-lg border border-border/60 bg-secondary/30 p-1">
-            <button
-              type="button"
-              onClick={() => setSignInMode("password")}
-              className={`flex-1 rounded-md px-3 py-2 text-sm ${signInMode === "password" ? "bg-background text-foreground" : "text-muted-foreground"}`}
-            >
-              Password
-            </button>
-            <button
-              type="button"
-              onClick={() => setSignInMode("code")}
-              className={`flex-1 rounded-md px-3 py-2 text-sm ${signInMode === "code" ? "bg-background text-foreground" : "text-muted-foreground"}`}
-            >
-              6-digit code
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="bg-secondary/50 border-border/60"
-            />
-          </div>
-
-          {signInMode === "password" ? (
+          {authStep === "email" && (
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link to="/forgot-password" className="text-xs text-primary hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="bg-secondary/50 border-border/60 pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="code">Email Code</Label>
-                <button type="button" onClick={handleSendCode} className="text-xs text-primary hover:underline" disabled={sendingCode}>
-                  {sendingCode ? "Sending..." : codeSent ? "Resend code" : "Send code"}
-                </button>
-              </div>
-              <InputOTP
-                id="code"
-                maxLength={6}
-                value={code}
-                onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
-                pattern="[0-9]*"
-                containerClassName="justify-start"
-              >
-                <InputOTPGroup>
-                  <InputOTPSlot index={0} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
-                  <InputOTPSlot index={1} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
-                  <InputOTPSlot index={2} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
-                  <InputOTPSlot index={3} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
-                  <InputOTPSlot index={4} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
-                  <InputOTPSlot index={5} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
-                </InputOTPGroup>
-              </InputOTP>
-              <p className="text-xs text-muted-foreground">Use the 6-digit code sent to your email.</p>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="bg-secondary/50 border-border/60"
+              />
             </div>
           )}
 
-          {mfaRequired && (
+          {authStep === "credentials" && (
+            <>
+              <div className="flex items-center justify-between rounded-lg border border-border/60 bg-secondary/20 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">{email}</span>
+                <button type="button" onClick={handleBackToEmail} className="text-primary hover:underline">Change</button>
+              </div>
+
+              <div className="flex rounded-lg border border-border/60 bg-secondary/30 p-1">
+                <button
+                  type="button"
+                  onClick={() => setSignInMode("password")}
+                  className={`flex-1 rounded-md px-3 py-2 text-sm ${signInMode === "password" ? "bg-background text-foreground" : "text-muted-foreground"}`}
+                >
+                  Password
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSignInMode("code")}
+                  className={`flex-1 rounded-md px-3 py-2 text-sm ${signInMode === "code" ? "bg-background text-foreground" : "text-muted-foreground"}`}
+                >
+                  6-digit code
+                </button>
+              </div>
+
+              {signInMode === "password" ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <Link to="/forgot-password" className="text-xs text-primary hover:underline">
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="bg-secondary/50 border-border/60 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="code">Email Code</Label>
+                    <button type="button" onClick={handleSendCode} className="text-xs text-primary hover:underline" disabled={sendingCode}>
+                      {sendingCode ? "Sending..." : codeSent ? "Resend code" : "Send code"}
+                    </button>
+                  </div>
+                  <InputOTP
+                    id="code"
+                    maxLength={6}
+                    value={code}
+                    onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
+                    pattern="[0-9]*"
+                    containerClassName="justify-start"
+                  >
+                    <InputOTPGroup>
+                      <InputOTPSlot index={0} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
+                      <InputOTPSlot index={1} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
+                      <InputOTPSlot index={2} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
+                      <InputOTPSlot index={3} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
+                      <InputOTPSlot index={4} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
+                      <InputOTPSlot index={5} className="h-11 w-11 rounded-md border border-border/70 bg-secondary/40" />
+                    </InputOTPGroup>
+                  </InputOTP>
+                  <p className="text-xs text-muted-foreground">Use the 6-digit code sent to your email.</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {authStep === "mfa" && mfaRequired && (
             <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/20 p-3">
               <Label htmlFor="mfaCode">Authenticator code</Label>
               <Input
@@ -318,20 +378,22 @@ export default function Login() {
                 onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 className="bg-secondary/50 border-border/60"
               />
-              <p className="text-xs text-muted-foreground">Two-factor authentication is enabled for this account.</p>
+              <p className="text-xs text-muted-foreground">
+                {mfaMethod === "webauthn" ? "Complete passkey verification in your browser prompt." : "Two-factor authentication is enabled for this account."}
+              </p>
             </div>
           )}
         </div>
 
         <Button
-          type={mfaRequired ? "button" : "submit"}
-          onClick={mfaRequired ? handleMfaVerify : undefined}
+          type={authStep === "email" || authStep === "mfa" ? "button" : "submit"}
+          onClick={authStep === "email" ? handleContinueFromEmail : authStep === "mfa" ? handleMfaVerify : undefined}
           className="w-full zuup-gradient"
           size="lg"
           disabled={loading}
         >
           {loading ? <Loader2 className="animate-spin" size={18} /> : <LogIn size={18} />}
-          {mfaRequired ? "Verify 2FA" : "Sign In"}
+          {authStep === "email" ? "Continue" : authStep === "mfa" ? "Verify 2FA" : "Sign In"}
         </Button>
 
         <p className="text-center text-sm text-muted-foreground">

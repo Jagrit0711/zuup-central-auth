@@ -62,6 +62,7 @@ export default function Authorize() {
   const [mfaCode, setMfaCode] = useState("");
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+  const [mfaMethod, setMfaMethod] = useState<"totp" | "webauthn" | null>(null);
   const [mfaPending, setMfaPending] = useState(false);
   const [pendingMethod, setPendingMethod] = useState<"email_password" | "email_code" | null>(null);
   const codeSubmitInFlightRef = useRef(false);
@@ -101,7 +102,7 @@ export default function Authorize() {
     setPhase("consent");
   };
 
-  const maybeStartMfa = async () => {
+  const maybeStartMfa = async (method: "email_password" | "email_code", userId?: string) => {
     const factorsResult = await supabase.auth.mfa.listFactors();
     if (factorsResult.error) throw factorsResult.error;
 
@@ -112,6 +113,23 @@ export default function Authorize() {
     const verifiedFactor = factors.find((factor: any) => factor?.status === "verified");
     if (!verifiedFactor?.id) return false;
 
+    const factorType = String(verifiedFactor.factor_type || "").toLowerCase();
+    if (factorType === "webauthn") {
+      const webauthnApi = (supabase.auth.mfa as any)?.webauthn;
+      if (!webauthnApi?.authenticate) {
+        throw new Error("Passkey login is not available in this browser/project");
+      }
+      const result = await webauthnApi.authenticate({ factorId: verifiedFactor.id });
+      if (result?.error) throw result.error;
+      if (!userId) {
+        const current = await supabase.auth.getUser();
+        userId = current.data?.user?.id;
+      }
+      if (!userId) throw new Error("Could not resolve signed-in user");
+      await completeLogin(method, userId);
+      return true;
+    }
+
     setMfaPending(true);
     const challenge = await supabase.auth.mfa.challenge({ factorId: verifiedFactor.id } as any);
     if (challenge.error) {
@@ -121,6 +139,7 @@ export default function Authorize() {
 
     setMfaFactorId(verifiedFactor.id);
     setMfaChallengeId(challenge.data.id);
+    setMfaMethod("totp");
     setMfaRequired(true);
     setPhase("login");
     toast.message("Enter your 2FA authenticator code");
@@ -155,6 +174,7 @@ export default function Authorize() {
       setMfaCode("");
       setMfaFactorId(null);
       setMfaChallengeId(null);
+      setMfaMethod(null);
       setPendingMethod(null);
 
       await completeLogin(method, userId);
@@ -182,7 +202,7 @@ export default function Authorize() {
       setCode("");
       setCodeSent(false);
 
-      const mfaStarted = await maybeStartMfa();
+      const mfaStarted = await maybeStartMfa("email_code", data.session?.user?.id || data.user?.id || undefined);
       if (mfaStarted) {
         setPendingMethod("email_code");
         return;
@@ -291,7 +311,7 @@ export default function Authorize() {
     try {
       const data = await signIn(email, password);
 
-      const mfaStarted = await maybeStartMfa();
+      const mfaStarted = await maybeStartMfa("email_password", data.session?.user?.id || data.user?.id || undefined);
       if (mfaStarted) {
         setPendingMethod("email_password");
         return;
@@ -489,7 +509,9 @@ export default function Authorize() {
                   onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   className="bg-secondary/50 border-border/60"
                 />
-                <p className="text-xs text-muted-foreground">Two-factor authentication is enabled for this account.</p>
+                <p className="text-xs text-muted-foreground">
+                  {mfaMethod === "webauthn" ? "Complete passkey verification in your browser prompt." : "Two-factor authentication is enabled for this account."}
+                </p>
               </div>
             )}
           </div>

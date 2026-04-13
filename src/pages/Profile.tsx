@@ -212,6 +212,7 @@ export default function Profile() {
   const [mfaVerifyCode, setMfaVerifyCode] = useState("");
   const [mfaLoading, setMfaLoading] = useState(false);
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
 
   const [auditLog, setAuditLog] = useState<AuditEvent[]>([]);
   const [revokedClientIds, setRevokedClientIds] = useState<string[]>(() => {
@@ -268,6 +269,15 @@ export default function Profile() {
   useEffect(() => {
     setAlertsEnabled(user?.user_metadata?.security_alerts_enabled !== false);
   }, [user?.user_metadata?.security_alerts_enabled]);
+
+  useEffect(() => {
+    setFullName(user?.user_metadata?.full_name || "");
+    setLastName(user?.user_metadata?.last_name || "user");
+    setPhoneNumber(user?.user_metadata?.phone || "+1 (555) 123-4567");
+    setUsername(user?.user_metadata?.username || "");
+    setNewEmail(user?.email || "");
+    setAvatarUrl(user?.user_metadata?.avatar_url || "");
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -400,6 +410,30 @@ export default function Profile() {
       toast.error(err.message || "Failed to disable 2FA");
     } finally {
       setMfaLoading(false);
+    }
+  };
+
+  const handleSetupPasskey = async () => {
+    setPasskeyLoading(true);
+    try {
+      const api = (supabase.auth.mfa as any)?.webauthn;
+      if (!api?.register) {
+        throw new Error("Passkeys are not available in this browser/project configuration");
+      }
+
+      const result = await api.register({
+        friendlyName: `Passkey ${new Date().toLocaleDateString()}`,
+      });
+
+      if (result?.error) throw result.error;
+      logAuditEvent({ type: "passkey_enabled", user_id: user?.id });
+      toast.success("Passkey added successfully");
+      setMfaEnabled(true);
+      setMfaFactorId(result?.data?.id || mfaFactorId);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to set up passkey");
+    } finally {
+      setPasskeyLoading(false);
     }
   };
 
@@ -902,7 +936,9 @@ export default function Profile() {
               <div style={card}>
                 <p style={{ margin: "0 0 10px", fontWeight: 600 }}>Passkeys</p>
                 <p style={{ margin: "0 0 12px", fontSize: 13, color: "#9ca3af" }}>Sign in securely using a passkey stored on your device.</p>
-                <Button variant="outline" onClick={() => toast.message("Passkeys require WebAuthn backend wiring; planned next")}>Set up passkey</Button>
+                <Button variant="outline" onClick={handleSetupPasskey} disabled={passkeyLoading}>
+                  {passkeyLoading ? <RefreshCw className="animate-spin" size={14} /> : <Fingerprint size={14} />} Set up passkey
+                </Button>
               </div>
 
               <div style={card}>

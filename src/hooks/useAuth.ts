@@ -3,27 +3,11 @@ import { supabase } from "@/lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 
 type EmailCodeIntent = "login" | "signup";
-type AuthSource = "supabase" | "custom" | null;
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [authSource, setAuthSource] = useState<AuthSource>(null);
-
-  const hydrateCustomSession = async () => {
-    const response = await fetch("/api/account/session", { credentials: "include" });
-    if (!response.ok) return false;
-
-    const body = await response.json().catch(() => ({}));
-    if (!body?.user || !body?.session) return false;
-
-    setUser(body.user);
-    setSession(body.session);
-    setAuthSource("custom");
-    setLoading(false);
-    return true;
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -31,15 +15,12 @@ export function useAuth() {
 
     const onVisibilityChange = () => {
       if (document.visibilityState !== "visible") return;
-      void hydrateCustomSession()
-        .then((hydrated) => {
-          if (hydrated) return;
-          return supabase.auth.refreshSession().then(({ data }) => {
-            if (data?.session) {
-              setSession(data.session);
-              setUser(data.session.user);
-            }
-          });
+      void supabase.auth.refreshSession()
+        .then(({ data }) => {
+          if (data?.session) {
+            setSession(data.session);
+            setUser(data.session.user);
+          }
         })
         .catch(() => {
           // Silent refresh for resilience only.
@@ -48,14 +29,13 @@ export function useAuth() {
 
     const start = async () => {
       try {
-        const hydrated = await hydrateCustomSession();
-        if (cancelled || hydrated) return;
+        await fetch("/api/account/logout", { method: "POST", credentials: "include" }).catch(() => {});
+        if (cancelled) return;
 
         const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
           (_event, nextSession) => {
             setSession(nextSession);
             setUser(nextSession?.user ?? null);
-            setAuthSource(nextSession ? "supabase" : null);
             setLoading(false);
           }
         );
@@ -65,7 +45,6 @@ export function useAuth() {
           if (cancelled) return;
           setSession(nextSession);
           setUser(nextSession?.user ?? null);
-          setAuthSource(nextSession ? "supabase" : null);
           setLoading(false);
         });
 
@@ -145,15 +124,6 @@ export function useAuth() {
   };
 
   const signOut = async () => {
-    if (authSource === "custom") {
-      await fetch("/api/account/logout", { method: "POST", credentials: "include" });
-      await supabase.auth.signOut().catch(() => {});
-      setUser(null);
-      setSession(null);
-      setAuthSource(null);
-      return;
-    }
-
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   };
@@ -166,67 +136,32 @@ export function useAuth() {
   };
 
   const updatePassword = async (password: string) => {
-    if (authSource === "custom") {
-      throw new Error("Password updates are not available for OTP-only accounts");
-    }
-
     const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
   };
 
   const updateProfile = async (data: Record<string, unknown>) => {
-    if (authSource === "custom") {
-      const response = await fetch("/api/account/profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ action: "update_profile", ...data }),
-      });
+    const mergedMetadata = {
+      ...(user?.user_metadata || {}),
+      ...data,
+    };
 
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(body?.message || body?.error || "Failed to update profile");
-      }
-
-      setUser(body.user);
-      setSession((currentSession) => currentSession ? { ...currentSession, user: body.user } as Session : currentSession);
-      return;
-    }
-
-    const { error } = await supabase.auth.updateUser({ data });
+    const { error } = await supabase.auth.updateUser({ data: mergedMetadata });
     if (error) throw error;
+
+    const { data: refreshed } = await supabase.auth.getUser();
+    if (refreshed?.user) {
+      setUser(refreshed.user);
+      setSession((currentSession) => currentSession ? { ...currentSession, user: refreshed.user } as Session : currentSession);
+    }
   };
 
   const updateEmail = async (email: string) => {
-    if (authSource === "custom") {
-      const response = await fetch("/api/account/profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ action: "update_email", email }),
-      });
-
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(body?.message || body?.error || "Failed to update email");
-      }
-
-      setUser(body.user);
-      setSession((currentSession) => currentSession ? { ...currentSession, user: body.user } as Session : currentSession);
-      return;
-    }
-
     const { error } = await supabase.auth.updateUser({ email });
     if (error) throw error;
   };
 
   const refreshSession = async () => {
-    if (authSource === "custom") {
-      const hydrated = await hydrateCustomSession();
-      if (!hydrated) throw new Error("No active session");
-      return { session, user };
-    }
-
     const { data, error } = await supabase.auth.refreshSession();
     if (error) throw error;
     return data;
