@@ -194,8 +194,22 @@ export function useAuth() {
   };
 
   const updateEmail = async (email: string) => {
-    const { error } = await supabase.auth.updateUser({ email });
-    if (error) throw error;
+    const token = await getAccessToken();
+    const response = await fetch("/api/account/global-profile", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body?.message || body?.error || "Failed to update global profile email");
+    }
+
+    return body?.user || null;
   };
 
   const refreshSession = async () => {

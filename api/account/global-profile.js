@@ -1,4 +1,4 @@
-import { ensureGlobalUser, getUserById, updateUserById } from "../../server/account/store.js";
+import { ensureGlobalUser, getUserByEmail, getUserById, updateUserById } from "../../server/account/store.js";
 import { parseBody } from "../../server/oauth/utils.js";
 
 const DEFAULT_SUPABASE_URL = "https://qnapwukqhybziduhzpow.supabase.co";
@@ -79,11 +79,21 @@ export default async function handler(req, res) {
     return res.status(status === 200 ? 401 : status).json({ error: "invalid_session" });
   }
 
-  const globalUser = await ensureGlobalUser({
-    id: authUser.id,
-    email: authUser.email,
-    metadata: authUser.user_metadata || {},
-  });
+  const normalizedAuthEmail = String(authUser.email || "").trim().toLowerCase();
+
+  let globalUser = await getUserById(authUser.id);
+  if (!globalUser && normalizedAuthEmail) {
+    // Backward compatibility: older rows were created with random UUIDs.
+    globalUser = await getUserByEmail(normalizedAuthEmail);
+  }
+
+  if (!globalUser) {
+    globalUser = await ensureGlobalUser({
+      id: authUser.id,
+      email: normalizedAuthEmail,
+      metadata: {},
+    });
+  }
 
   if (req.method === "GET") {
     return res.status(200).json({ ok: true, user: globalUser });
@@ -98,7 +108,7 @@ export default async function handler(req, res) {
 
   const nextMetadata = buildMetadataPatch(body, globalUser?.user_metadata || {});
   const updated = await updateUserById(authUser.id, {
-    email: String(body.email || authUser.email || "").trim().toLowerCase() || globalUser.email,
+    email: String(body.email || globalUser?.email || normalizedAuthEmail || "").trim().toLowerCase() || globalUser.email,
     user_metadata: nextMetadata,
   });
 
