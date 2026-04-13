@@ -1,5 +1,5 @@
-import { parseBody, setCorsHeaders } from "./_utils.js";
-import { insertClient } from "./_clients.js";
+import { parseBody, setCorsHeaders } from "../../server/oauth/utils.js";
+import { insertClient } from "../../server/oauth/clients.js";
 
 export default async function handler(req, res) {
   setCorsHeaders(req, res);

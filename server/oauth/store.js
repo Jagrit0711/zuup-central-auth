@@ -1,4 +1,4 @@
-import { generateOpaqueToken } from "./_utils.js";
+import { generateOpaqueToken } from "./utils.js";
 
 const DEFAULT_SUPABASE_URL = "https://qnapwukqhybziduhzpow.supabase.co";
 const DEFAULT_TABLE = "oauth_authorization_codes";

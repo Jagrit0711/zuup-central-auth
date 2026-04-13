@@ -1,5 +1,5 @@
-import { issueServerCode } from "./_store.js";
-import { parseBody, setCorsHeaders } from "./_utils.js";
+import { issueServerCode } from "../../server/oauth/store.js";
+import { parseBody, setCorsHeaders } from "../../server/oauth/utils.js";
 
 export default async function handler(req, res) {
   setCorsHeaders(req, res);

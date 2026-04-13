@@ -1,4 +1,4 @@
-import { parseBody, signJwtHs256, verifyJwtHs256, generateOpaqueToken } from "../oauth/_utils.js";
+import { signJwtHs256, verifyJwtHs256, generateOpaqueToken } from "../oauth/utils.js";
 
 const SESSION_COOKIE = "zuup_session";
 const SESSION_ISSUER = process.env.ZUUP_SESSION_ISSUER || process.env.ZUUP_ISSUER || "https://auth.zuup.dev";

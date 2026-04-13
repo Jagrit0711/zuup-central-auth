@@ -1,6 +1,6 @@
-import { getSessionCookie, verifySessionToken } from "./_session.js";
-import { getUserById, updateUserById } from "./_store.js";
-import { parseBody } from "../oauth/_utils.js";
+import { getSessionCookie, verifySessionToken } from "../../server/account/session.js";
+import { getUserById, updateUserById } from "../../server/account/store.js";
+import { parseBody } from "../../server/oauth/utils.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {

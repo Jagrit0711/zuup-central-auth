@@ -170,7 +170,6 @@ export async function resolveClientCredentials(req, bodyClientId) {
     return { error: "invalid_client", msg: "Missing client_id" };
   }
 
-  // 1) Multi-client env map (highest priority when client_id is explicitly provided)
   if (rawMap) {
     let map;
     try {
@@ -188,7 +187,6 @@ export async function resolveClientCredentials(req, bodyClientId) {
     }
   }
 
-  // 2) DB-backed dynamic lookup
   const dbSecret = await getClientSecretFromDb(clientId);
   if (dbSecret) {
     if (clientSecret && clientSecret !== dbSecret) {
@@ -197,7 +195,6 @@ export async function resolveClientCredentials(req, bodyClientId) {
     return { clientId, clientSecret: dbSecret };
   }
 
-  // 3) Single-client fallback (legacy mode)
   if (singleClientId && singleClientSecret) {
     if (clientId !== singleClientId) {
       return {

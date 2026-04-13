@@ -123,7 +123,7 @@ export function useAuth() {
     metadata?: Record<string, unknown>,
   ) => {
     const response = await withTimeout(
-      fetch("/api/account/otp/request", {
+      fetch("/api/account/otp-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -143,7 +143,7 @@ export function useAuth() {
 
   const verifyEmailCode = async (email: string, token: string, intent: EmailCodeIntent = "login") => {
     const response = await withTimeout(
-      fetch("/api/account/otp/verify", {
+      fetch("/api/account/otp-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

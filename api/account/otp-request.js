@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
-import { createOrUpdateUser, generateOtpCode, getUserByEmail, normalizeEmail, pruneOtpCodes, storeOtpCode } from "./_store.js";
-import { parseBody } from "../oauth/_utils.js";
+import { createOrUpdateUser, generateOtpCode, getUserByEmail, normalizeEmail, pruneOtpCodes, storeOtpCode } from "../../server/account/store.js";
+import { parseBody } from "../../server/oauth/utils.js";
 
 function getMailConfig() {
   return {

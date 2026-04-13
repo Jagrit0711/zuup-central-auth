@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { sha256Base64Url } from "../oauth/_utils.js";
+import { sha256Base64Url } from "../oauth/utils.js";
 
 const DEFAULT_SUPABASE_URL = "https://qnapwukqhybziduhzpow.supabase.co";
 

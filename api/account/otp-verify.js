@@ -1,6 +1,6 @@
-import { createOrUpdateUser, consumeOtpCode, getUserByEmail } from "./_store.js";
-import { createSessionToken, setSessionCookie } from "./_session.js";
-import { parseBody } from "../oauth/_utils.js";
+import { createOrUpdateUser, consumeOtpCode, getUserByEmail } from "../../server/account/store.js";
+import { createSessionToken, setSessionCookie } from "../../server/account/session.js";
+import { parseBody } from "../../server/oauth/utils.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {

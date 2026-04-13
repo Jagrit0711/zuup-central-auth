@@ -1,4 +1,4 @@
-import { consumeServerCode } from "./_store.js";
+import { consumeServerCode } from "../../server/oauth/store.js";
 import {
   parseBody,
   resolveClientCredentials,
@@ -6,7 +6,7 @@ import {
   sha256Base64Url,
   signJwtHs256,
   generateOpaqueToken,
-} from "./_utils.js";
+} from "../../server/oauth/utils.js";
 
 const DEFAULT_SUPABASE_URL = "https://qnapwukqhybziduhzpow.supabase.co";
 

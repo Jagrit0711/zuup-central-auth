@@ -1,5 +1,5 @@
-import { getSessionCookie, verifySessionToken } from "./_session.js";
-import { getUserById } from "./_store.js";
+import { getSessionCookie, verifySessionToken } from "../../server/account/session.js";
+import { getUserById } from "../../server/account/store.js";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {

@@ -1,4 +1,4 @@
-import { setCorsHeaders, verifyJwtHs256 } from "./_utils.js";
+import { setCorsHeaders, verifyJwtHs256 } from "../../server/oauth/utils.js";
 
 function getSigningSecret() {
   return process.env.ZUUP_OAUTH_SIGNING_SECRET || process.env.ZUUP_CLIENT_SECRET || "";
