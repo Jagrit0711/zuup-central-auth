@@ -1,0 +1,130 @@
+import crypto from "node:crypto";
+
+export function setCorsHeaders(req, res) {
+  const origin = req.headers.origin || "*";
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
+export async function parseBody(req) {
+  if (req.body && typeof req.body === "object") return req.body;
+  const bodyRaw = typeof req.body === "string" ? req.body : "";
+  const contentType = (req.headers["content-type"] || "").toLowerCase();
+
+  if (!bodyRaw) return {};
+
+  if (contentType.includes("application/json")) {
+    try {
+      return JSON.parse(bodyRaw);
+    } catch {
+      throw new Error("invalid_json");
+    }
+  }
+
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    const params = new URLSearchParams(bodyRaw);
+    return Object.fromEntries(params.entries());
+  }
+
+  try {
+    return JSON.parse(bodyRaw);
+  } catch {
+    return {};
+  }
+}
+
+export function generateOpaqueToken(bytes = 32) {
+  return crypto.randomBytes(bytes).toString("hex");
+}
+
+function base64UrlEncode(input) {
+  return Buffer.from(input)
+    .toString("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+}
+
+export function sha256Base64Url(input) {
+  const digest = crypto.createHash("sha256").update(input).digest();
+  return base64UrlEncode(digest);
+}
+
+export function signJwtHs256(payload, secret) {
+  const header = { alg: "HS256", typ: "JWT" };
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const unsigned = `${encodedHeader}.${encodedPayload}`;
+  const signature = crypto
+    .createHmac("sha256", secret)
+    .update(unsigned)
+    .digest("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+
+  return `${unsigned}.${signature}`;
+}
+
+export function resolveClientCredentials(req, bodyClientId) {
+  const authHeader = req.headers.authorization || "";
+  let basicClientId = "";
+  let basicClientSecret = "";
+
+  if (authHeader.toLowerCase().startsWith("basic ")) {
+    try {
+      const raw = Buffer.from(authHeader.slice(6), "base64").toString("utf8");
+      const idx = raw.indexOf(":");
+      if (idx >= 0) {
+        basicClientId = raw.slice(0, idx);
+        basicClientSecret = raw.slice(idx + 1);
+      }
+    } catch {
+      return { error: "invalid_authorization_header" };
+    }
+  }
+
+  const singleClientId = process.env.ZUUP_CLIENT_ID;
+  const singleClientSecret = process.env.ZUUP_CLIENT_SECRET;
+
+  if (singleClientId && singleClientSecret) {
+    const providedClientId = basicClientId || bodyClientId || singleClientId;
+    const providedSecret = basicClientSecret || req.body?.client_secret;
+
+    if (providedClientId !== singleClientId) {
+      return { error: "invalid_client", msg: "client_id mismatch" };
+    }
+
+    if (providedSecret && providedSecret !== singleClientSecret) {
+      return { error: "invalid_client", msg: "client_secret mismatch" };
+    }
+
+    return { clientId: singleClientId, clientSecret: singleClientSecret };
+  }
+
+  const rawMap = process.env.ZUUP_CLIENT_SECRETS_JSON;
+  if (!rawMap) {
+    return { error: "server_not_configured", msg: "Missing client credential config" };
+  }
+
+  let map;
+  try {
+    map = JSON.parse(rawMap);
+  } catch {
+    return { error: "server_not_configured", msg: "Invalid ZUUP_CLIENT_SECRETS_JSON" };
+  }
+
+  const clientId = basicClientId || bodyClientId;
+  const clientSecret = basicClientSecret || req.body?.client_secret;
+
+  if (!clientId) return { error: "invalid_client", msg: "Missing client_id" };
+  const expected = map[clientId];
+  if (!expected) return { error: "invalid_client", msg: "Unknown client_id" };
+  if (clientSecret && clientSecret !== expected) {
+    return { error: "invalid_client", msg: "Invalid client_secret" };
+  }
+
+  return { clientId, clientSecret: expected };
+}

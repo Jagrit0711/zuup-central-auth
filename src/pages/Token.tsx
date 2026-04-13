@@ -11,13 +11,6 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import {
-  consumeAuthCode,
-  verifyCodeChallenge,
-  getRegisteredClients,
-  logAuditEvent,
-} from "@/lib/oauth";
-import { supabase } from "@/lib/supabase";
 
 interface TokenResult {
   ok: boolean;
@@ -36,6 +29,7 @@ export default function TokenEndpoint() {
       const redirect_uri = searchParams.get("redirect_uri") || "";
       const client_id = searchParams.get("client_id") || "";
       const code_verifier = searchParams.get("code_verifier") || undefined;
+      const client_secret = searchParams.get("client_secret") || undefined;
 
       if (grant_type !== "authorization_code") {
         setResult({ ok: false, error: "unsupported_grant_type" });
@@ -47,65 +41,30 @@ export default function TokenEndpoint() {
         return;
       }
 
-      const authCode = consumeAuthCode(code);
-      if (!authCode) {
-        setResult({ ok: false, error: "invalid_grant: code not found, expired, or already used" });
-        return;
-      }
-
-      if (authCode.client_id !== client_id) {
-        setResult({ ok: false, error: "invalid_grant: client_id mismatch" });
-        return;
-      }
-
-      if (authCode.redirect_uri !== redirect_uri) {
-        setResult({ ok: false, error: "invalid_grant: redirect_uri mismatch" });
-        return;
-      }
-
-      // PKCE verification
-      if (authCode.code_challenge) {
-        if (!code_verifier) {
-          setResult({ ok: false, error: "invalid_request: code_verifier required" });
-          return;
-        }
-        const valid = await verifyCodeChallenge(
-          code_verifier,
-          authCode.code_challenge,
-          authCode.code_challenge_method || "S256"
-        );
-        if (!valid) {
-          setResult({ ok: false, error: "invalid_grant: PKCE verification failed" });
-          return;
-        }
-      }
-
-      // Check client exists
-      const client = getRegisteredClients()[client_id];
-      if (!client) {
-        setResult({ ok: false, error: "invalid_client" });
-        return;
-      }
-
-      logAuditEvent({
-        type: "token_issued",
-        user_id: authCode.user_id,
-        client_id,
-        details: { grant_type: "authorization_code", scopes: authCode.scopes.join(" ") },
-      });
-
-      // Return simulated token response
-      // In production, you'd call your backend to generate a proper JWT
-      setResult({
-        ok: true,
-        data: {
-          access_token: `zuup_at_${authCode.code}_${Date.now()}`,
-          token_type: "Bearer",
-          expires_in: 3600,
-          scope: authCode.scopes.join(" "),
-          user_id: authCode.user_id,
+      const response = await fetch("/api/oauth/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(client_id && client_secret
+            ? { Authorization: `Basic ${btoa(`${client_id}:${client_secret}`)}` }
+            : {}),
         },
+        body: JSON.stringify({
+          grant_type,
+          code,
+          redirect_uri,
+          client_id,
+          code_verifier,
+        }),
       });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setResult({ ok: false, error: JSON.stringify(payload) });
+        return;
+      }
+
+      setResult({ ok: true, data: payload });
     })();
   }, []);
 

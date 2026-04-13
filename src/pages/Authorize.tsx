@@ -3,7 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
   validateAuthRequest,
-  generateAuthCode,
   buildSuccessRedirect,
   buildErrorRedirect,
   logAuditEvent,
@@ -73,7 +72,10 @@ export default function Authorize() {
     if (user && session) {
       if (validatedReq.client.is_first_party) {
         // First-party apps skip consent screen
-        issueCodeAndRedirect(validatedReq, session.user.id);
+        void issueCodeAndRedirect(validatedReq, session.user.id).catch((err) => {
+          setError(err?.message || "Failed to continue authorization");
+          setPhase("error");
+        });
       } else {
         setPhase("consent");
       }
@@ -84,14 +86,25 @@ export default function Authorize() {
 
   async function issueCodeAndRedirect(req: ValidatedRequest, userId: string) {
     setPhase("redirecting");
-    const code = generateAuthCode({
-      client_id: req.client.client_id,
-      redirect_uri: req.redirect_uri,
-      user_id: userId,
-      scopes: req.scopes,
-      code_challenge: req.code_challenge,
-      code_challenge_method: req.code_challenge_method,
+    const response = await fetch("/api/oauth/issue-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: req.client.client_id,
+        redirect_uri: req.redirect_uri,
+        user_id: userId,
+        scopes: req.scopes,
+        code_challenge: req.code_challenge,
+        code_challenge_method: req.code_challenge_method,
+      }),
     });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body?.error || "Failed to issue authorization code");
+    }
+
+    const { code } = await response.json();
 
     logAuditEvent({
       type: "token_issued",
@@ -141,7 +154,12 @@ export default function Authorize() {
     }
 
     logAuditEvent({ type: "consent_granted", user_id: user.id, client_id: validatedReq.client.client_id });
-    await issueCodeAndRedirect(validatedReq, user.id);
+    try {
+      await issueCodeAndRedirect(validatedReq, user.id);
+    } catch (err: any) {
+      setError(err?.message || "Failed to continue authorization");
+      setPhase("error");
+    }
   };
 
   // ─── Loading ────────────────────────────────────────────────────────────────

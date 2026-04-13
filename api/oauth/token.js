@@ -1,149 +1,109 @@
-const DEFAULT_SUPABASE_PROJECT_URL = "https://qnapwukqhybziduhzpow.supabase.co";
+import { consumeServerCode } from "./_store.js";
+import {
+  parseBody,
+  resolveClientCredentials,
+  setCorsHeaders,
+  sha256Base64Url,
+  signJwtHs256,
+  generateOpaqueToken,
+} from "./_utils.js";
 
-function setCorsHeaders(req, res) {
-  const origin = req.headers.origin || "*";
-  res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+function getIssuer() {
+  return process.env.ZUUP_ISSUER || "https://auth.zuup.dev";
 }
 
-function resolveTokenEndpoint() {
-  if (process.env.ZUUP_TOKEN_URL) return process.env.ZUUP_TOKEN_URL;
-  if (process.env.SUPABASE_OAUTH_TOKEN_URL) return process.env.SUPABASE_OAUTH_TOKEN_URL;
-  const base = process.env.SUPABASE_URL || DEFAULT_SUPABASE_PROJECT_URL;
-  return `${base.replace(/\/+$/, "")}/auth/v1/oauth/token`;
-}
-
-function buildTokenAuthHeaders(clientId, clientSecret) {
-  const method = (process.env.ZUUP_CLIENT_AUTH_METHOD || "client_secret_basic").trim();
-  if (method === "client_secret_post") {
-    return { mode: "client_secret_post", headers: {} };
-  }
-  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
-  return {
-    mode: "client_secret_basic",
-    headers: {
-      Authorization: `Basic ${basic}`,
-    },
-  };
-}
-
-function parseBody(req) {
-  let body = req.body || {};
-  if (typeof body === "string") {
-    try {
-      body = JSON.parse(body || "{}");
-    } catch {
-      return null;
-    }
-  }
-  return body;
-}
-
-function resolveClientCredentials(requestClientId) {
-  const singleClientId = process.env.ZUUP_CLIENT_ID;
-  const singleClientSecret = process.env.ZUUP_CLIENT_SECRET;
-
-  // Simple single-client deployment mode.
-  if (singleClientId && singleClientSecret) {
-    if (requestClientId && requestClientId !== singleClientId) {
-      return { error: "client_id_mismatch", expected: singleClientId, received: requestClientId };
-    }
-    return { clientId: singleClientId, clientSecret: singleClientSecret };
-  }
-
-  // Multi-client mode using JSON mapping in env, example:
-  // ZUUP_CLIENT_SECRETS_JSON={"client_id_a":"secret_a","client_id_b":"secret_b"}
-  const mapRaw = process.env.ZUUP_CLIENT_SECRETS_JSON;
-  if (!mapRaw) {
-    return { error: "server_not_configured", missing: ["ZUUP_CLIENT_ID + ZUUP_CLIENT_SECRET or ZUUP_CLIENT_SECRETS_JSON"] };
-  }
-
-  if (!requestClientId) {
-    return { error: "missing_client_id" };
-  }
-
-  try {
-    const parsed = JSON.parse(mapRaw);
-    const secret = parsed?.[requestClientId];
-    if (!secret) return { error: "unknown_client_id", client_id: requestClientId };
-    return { clientId: requestClientId, clientSecret: secret };
-  } catch {
-    return { error: "invalid_client_secret_map" };
-  }
+function getSigningSecret() {
+  return process.env.ZUUP_OAUTH_SIGNING_SECRET || process.env.ZUUP_CLIENT_SECRET || "";
 }
 
 export default async function handler(req, res) {
   setCorsHeaders(req, res);
 
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
-
+  if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST") {
-    return res.status(405).json({
-      error: "method_not_allowed",
-      method: req.method,
-      expected: ["POST", "OPTIONS"],
-    });
+    return res.status(405).json({ error: "method_not_allowed", expected: ["POST", "OPTIONS"] });
   }
 
-  const body = parseBody(req);
-  if (!body) {
+  let body;
+  try {
+    body = await parseBody(req);
+  } catch {
     return res.status(400).json({ error: "invalid_json" });
   }
 
-  const { code, code_verifier, redirect_uri, client_id } = body;
-  if (!code || !code_verifier || !redirect_uri) {
-    return res.status(400).json({
-      error: "missing_required_fields",
-      required: ["code", "code_verifier", "redirect_uri"],
-    });
+  req.body = body;
+
+  const grantType = body.grant_type || "authorization_code";
+  if (grantType !== "authorization_code") {
+    return res.status(400).json({ error: "unsupported_grant_type" });
   }
 
-  const creds = resolveClientCredentials(client_id);
-  if (creds.error) {
-    return res.status(400).json(creds);
+  const { code, redirect_uri, code_verifier, client_id } = body;
+  if (!code || !redirect_uri) {
+    return res.status(400).json({ error: "invalid_request", msg: "Missing code or redirect_uri" });
   }
 
-  const tokenEndpoint = resolveTokenEndpoint();
-  const auth = buildTokenAuthHeaders(creds.clientId, creds.clientSecret);
-  const tokenParams = new URLSearchParams({
-    grant_type: "authorization_code",
-    client_id: creds.clientId,
-    code,
-    redirect_uri,
-    code_verifier,
-  });
-
-  if (auth.mode === "client_secret_post") {
-    tokenParams.set("client_secret", creds.clientSecret);
+  const client = resolveClientCredentials(req, client_id);
+  if (client.error) {
+    return res.status(401).json({ error: "invalid_client", details: client });
   }
 
-  try {
-    const upstream = await fetch(tokenEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        ...auth.headers,
-      },
-      body: tokenParams,
-    });
+  const authCode = await consumeServerCode(code);
+  if (!authCode) {
+    return res.status(400).json({ error: "invalid_grant", msg: "Invalid authorization code" });
+  }
 
-    const text = await upstream.text();
-    let payload;
-    try {
-      payload = text ? JSON.parse(text) : {};
-    } catch {
-      payload = { raw: text };
+  if (authCode.client_id !== client.clientId) {
+    return res.status(400).json({ error: "invalid_grant", msg: "client_id mismatch" });
+  }
+
+  if (authCode.redirect_uri !== redirect_uri) {
+    return res.status(400).json({ error: "invalid_grant", msg: "redirect_uri mismatch" });
+  }
+
+  if (authCode.code_challenge) {
+    if (!code_verifier) {
+      return res.status(400).json({ error: "invalid_request", msg: "code_verifier required" });
     }
 
-    return res.status(upstream.status).json(payload);
-  } catch (error) {
-    return res.status(502).json({
-      error: "upstream_unreachable",
-      message: error instanceof Error ? error.message : String(error),
-    });
+    const method = authCode.code_challenge_method || "S256";
+    if (method === "plain") {
+      if (code_verifier !== authCode.code_challenge) {
+        return res.status(400).json({ error: "invalid_grant", msg: "PKCE verification failed" });
+      }
+    } else {
+      const digest = sha256Base64Url(code_verifier);
+      if (digest !== authCode.code_challenge) {
+        return res.status(400).json({ error: "invalid_grant", msg: "PKCE verification failed" });
+      }
+    }
   }
+
+  const signingSecret = getSigningSecret();
+  if (!signingSecret) {
+    return res.status(500).json({ error: "server_not_configured", msg: "Missing signing secret" });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const expiresIn = 3600;
+  const payload = {
+    iss: getIssuer(),
+    sub: authCode.user_id,
+    aud: client.clientId,
+    iat: now,
+    exp: now + expiresIn,
+    scope: (authCode.scopes || []).join(" "),
+    jti: generateOpaqueToken(12),
+  };
+
+  const accessToken = signJwtHs256(payload, signingSecret);
+  const refreshToken = `zuup_rt_${generateOpaqueToken(24)}`;
+
+  return res.status(200).json({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_type: "Bearer",
+    expires_in: expiresIn,
+    scope: payload.scope,
+  });
 }
