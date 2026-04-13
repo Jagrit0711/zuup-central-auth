@@ -91,6 +91,50 @@ export async function getUserById(id) {
   return rows?.[0] || null;
 }
 
+export async function ensureGlobalUser({ id, email, metadata = {} }) {
+  if (!id) throw new Error("missing_user_id");
+
+  const existing = await getUserById(id);
+  if (existing) {
+    const nextMetadata = {
+      ...(existing.user_metadata || {}),
+      ...metadata,
+    };
+
+    const updated = await updateUserById(id, {
+      email: normalizeEmail(email) || existing.email,
+      user_metadata: nextMetadata,
+    });
+    return updated || existing;
+  }
+
+  const user = {
+    id,
+    email: normalizeEmail(email),
+    user_metadata: metadata || {},
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    last_sign_in_at: null,
+  };
+
+  const insertRes = await restFetch(getDbConfig().usersTable, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(user),
+  });
+
+  if (!insertRes.ok) {
+    const details = await insertRes.text();
+    throw new Error(`create_global_user_failed:${details}`);
+  }
+
+  const rows = await insertRes.json();
+  return rows?.[0] || user;
+}
+
 export async function createOrUpdateUser({ email, metadata = {}, allowCreate = true }) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) {

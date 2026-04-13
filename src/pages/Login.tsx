@@ -93,7 +93,13 @@ export default function Login() {
       if (!webauthnApi?.authenticate) {
         throw new Error("Passkey login is not available in this browser/project");
       }
-      const result = await webauthnApi.authenticate({ factorId: verifiedFactor.id });
+      const result = await webauthnApi.authenticate({
+        factorId: verifiedFactor.id,
+        webauthn: {
+          rpId: window.location.hostname,
+          rpOrigins: [window.location.origin],
+        },
+      });
       if (result?.error) throw result.error;
       await finalizeSignIn(method, userId);
       return true;

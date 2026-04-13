@@ -18,7 +18,6 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
-  Fingerprint,
   Globe,
   Key,
   Lock,
@@ -179,14 +178,14 @@ function parseDevice(userAgent: string): { device: string; browser: string } {
 }
 
 export default function Profile() {
-  const { user, session, signOut, updateProfile, updateEmail, updatePassword } = useAuth();
+  const { user, session, signOut, updateProfile, updateEmail, updatePassword, getGlobalProfile } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<TabId>("home");
   const [devMode, setDevMode] = useState<boolean>(() => localStorage.getItem("zuup_dev_mode") === "true");
 
-  const [fullName, setFullName] = useState(user?.user_metadata?.full_name || "");
+  const [fullName, setFullName] = useState(user?.user_metadata?.full_name || user?.user_metadata?.name || "");
   const [lastName, setLastName] = useState(user?.user_metadata?.last_name || "user");
   const [phoneNumber, setPhoneNumber] = useState(user?.user_metadata?.phone || "+1 (555) 123-4567");
   const [username, setUsername] = useState(user?.user_metadata?.username || "");
@@ -212,7 +211,6 @@ export default function Profile() {
   const [mfaVerifyCode, setMfaVerifyCode] = useState("");
   const [mfaLoading, setMfaLoading] = useState(false);
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
-  const [passkeyLoading, setPasskeyLoading] = useState(false);
 
   const [auditLog, setAuditLog] = useState<AuditEvent[]>([]);
   const [revokedClientIds, setRevokedClientIds] = useState<string[]>(() => {
@@ -271,13 +269,29 @@ export default function Profile() {
   }, [user?.user_metadata?.security_alerts_enabled]);
 
   useEffect(() => {
-    setFullName(user?.user_metadata?.full_name || "");
-    setLastName(user?.user_metadata?.last_name || "user");
-    setPhoneNumber(user?.user_metadata?.phone || "+1 (555) 123-4567");
-    setUsername(user?.user_metadata?.username || "");
+    const fallbackMetadata = user?.user_metadata || {};
+    setFullName(fallbackMetadata?.full_name || fallbackMetadata?.name || "");
+    setLastName(fallbackMetadata?.last_name || "user");
+    setPhoneNumber(fallbackMetadata?.phone || "+1 (555) 123-4567");
+    setUsername(fallbackMetadata?.username || "");
     setNewEmail(user?.email || "");
-    setAvatarUrl(user?.user_metadata?.avatar_url || "");
-  }, [user]);
+    setAvatarUrl(fallbackMetadata?.avatar_url || "");
+
+    if (!user?.id) return;
+    getGlobalProfile()
+      .then((globalUser) => {
+        const metadata = globalUser?.user_metadata || {};
+        setFullName(metadata?.full_name || metadata?.name || fallbackMetadata?.full_name || fallbackMetadata?.name || "");
+        setLastName(metadata?.last_name || fallbackMetadata?.last_name || "user");
+        setPhoneNumber(metadata?.phone || fallbackMetadata?.phone || "+1 (555) 123-4567");
+        setUsername(metadata?.username || fallbackMetadata?.username || "");
+        setNewEmail(globalUser?.email || user?.email || "");
+        setAvatarUrl(metadata?.avatar_url || fallbackMetadata?.avatar_url || "");
+      })
+      .catch(() => {
+        // Fall back to auth user metadata if global profile is unavailable.
+      });
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user) return;
@@ -305,7 +319,7 @@ export default function Profile() {
     }
   }, [devMode, activeTab]);
 
-  const displayName = fullName || user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
+  const displayName = fullName || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "User";
   const avatarInitial = displayName[0]?.toUpperCase() || "U";
   const completion = useMemo(() => {
     let score = 0;
@@ -413,30 +427,6 @@ export default function Profile() {
     }
   };
 
-  const handleSetupPasskey = async () => {
-    setPasskeyLoading(true);
-    try {
-      const api = (supabase.auth.mfa as any)?.webauthn;
-      if (!api?.register) {
-        throw new Error("Passkeys are not available in this browser/project configuration");
-      }
-
-      const result = await api.register({
-        friendlyName: `Passkey ${new Date().toLocaleDateString()}`,
-      });
-
-      if (result?.error) throw result.error;
-      logAuditEvent({ type: "passkey_enabled", user_id: user?.id });
-      toast.success("Passkey added successfully");
-      setMfaEnabled(true);
-      setMfaFactorId(result?.data?.id || mfaFactorId);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to set up passkey");
-    } finally {
-      setPasskeyLoading(false);
-    }
-  };
-
   const handleToggleAlerts = async () => {
     setUpdatingAlerts(true);
     try {
@@ -534,9 +524,15 @@ export default function Profile() {
   const handleSaveMyInfo = async () => {
     setSavingProfile(true);
     try {
+      const normalizedFullName = String(fullName || "").trim();
+      const normalizedLastName = String(lastName || "").trim();
+      const combinedName = `${normalizedFullName} ${normalizedLastName}`.trim();
+
       await updateProfile({
-        full_name: fullName,
-        last_name: lastName,
+        full_name: normalizedFullName,
+        first_name: normalizedFullName,
+        last_name: normalizedLastName,
+        name: combinedName || normalizedFullName,
         phone: phoneNumber,
         username,
         avatar_url: avatarUrl,
@@ -935,10 +931,12 @@ export default function Profile() {
 
               <div style={card}>
                 <p style={{ margin: "0 0 10px", fontWeight: 600 }}>Passkeys</p>
-                <p style={{ margin: "0 0 12px", fontSize: 13, color: "#9ca3af" }}>Sign in securely using a passkey stored on your device.</p>
-                <Button variant="outline" onClick={handleSetupPasskey} disabled={passkeyLoading}>
-                  {passkeyLoading ? <RefreshCw className="animate-spin" size={14} /> : <Fingerprint size={14} />} Set up passkey
-                </Button>
+                <p style={{ margin: "0 0 8px", fontSize: 13, color: "#9ca3af" }}>
+                  Passkey MFA is not enabled for this Supabase project. Use Authenticator App (TOTP) above.
+                </p>
+                <p style={{ margin: 0, fontSize: 12, color: "#f59e0b" }}>
+                  If you enable WebAuthn MFA in Supabase later, this section can be re-enabled.
+                </p>
               </div>
 
               <div style={card}>
