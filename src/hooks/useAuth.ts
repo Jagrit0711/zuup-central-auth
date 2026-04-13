@@ -139,77 +139,25 @@ export function useAuth() {
     if (error) throw error;
   };
 
-  const getAccessToken = async () => {
-    if (session?.access_token) return session.access_token;
-    const { data, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    const token = data?.session?.access_token;
-    if (!token) throw new Error("No active session");
-    return token;
-  };
-
-  const getGlobalProfile = async () => {
-    const token = await getAccessToken();
-    const response = await fetch("/api/account/global-profile", {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(body?.message || body?.error || "Failed to load global profile");
-    }
-
-    return body?.user || null;
-  };
-
   const updateProfile = async (data: Record<string, unknown>) => {
-    const token = await getAccessToken();
-    const response = await fetch("/api/account/global-profile", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
-    });
-
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(body?.message || body?.error || "Failed to update global profile");
-    }
-
-    const updatedGlobalUser = body?.user;
-    const nextMetadata = {
+    const mergedMetadata = {
       ...(user?.user_metadata || {}),
-      ...(updatedGlobalUser?.user_metadata || {}),
+      ...data,
     };
 
-    setUser((currentUser) => currentUser ? { ...currentUser, user_metadata: nextMetadata } as User : currentUser);
-    setSession((currentSession) => currentSession && currentSession.user
-      ? { ...currentSession, user: { ...currentSession.user, user_metadata: nextMetadata } as User }
-      : currentSession);
+    const { error } = await supabase.auth.updateUser({ data: mergedMetadata });
+    if (error) throw error;
+
+    const { data: refreshed } = await supabase.auth.getUser();
+    if (refreshed?.user) {
+      setUser(refreshed.user);
+      setSession((currentSession) => currentSession ? { ...currentSession, user: refreshed.user } as Session : currentSession);
+    }
   };
 
   const updateEmail = async (email: string) => {
-    const token = await getAccessToken();
-    const response = await fetch("/api/account/global-profile", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ email }),
-    });
-
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(body?.message || body?.error || "Failed to update global profile email");
-    }
-
-    return body?.user || null;
+    const { error } = await supabase.auth.updateUser({ email });
+    if (error) throw error;
   };
 
   const refreshSession = async () => {
@@ -224,7 +172,6 @@ export function useAuth() {
     sendEmailCode, verifyEmailCode,
     resetPassword, updatePassword,
     updateProfile, updateEmail,
-    getGlobalProfile,
     refreshSession,
   };
 }

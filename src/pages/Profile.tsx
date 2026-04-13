@@ -178,7 +178,7 @@ function parseDevice(userAgent: string): { device: string; browser: string } {
 }
 
 export default function Profile() {
-  const { user, session, signOut, updateProfile, updatePassword, getGlobalProfile } = useAuth();
+  const { user, session, signOut, updateProfile, updateEmail, updatePassword } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -190,7 +190,6 @@ export default function Profile() {
   const [phoneNumber, setPhoneNumber] = useState(user?.user_metadata?.phone || "+1 (555) 123-4567");
   const [username, setUsername] = useState(user?.user_metadata?.username || "");
   const [newEmail, setNewEmail] = useState(user?.email || "");
-  const [globalEmail, setGlobalEmail] = useState(user?.email || "");
   const [avatarUrl, setAvatarUrl] = useState(user?.user_metadata?.avatar_url || "");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -270,30 +269,12 @@ export default function Profile() {
   }, [user?.user_metadata?.security_alerts_enabled]);
 
   useEffect(() => {
-    const fallbackMetadata = user?.user_metadata || {};
-    setFullName(fallbackMetadata?.full_name || fallbackMetadata?.name || "");
-    setLastName(fallbackMetadata?.last_name || "user");
-    setPhoneNumber(fallbackMetadata?.phone || "+1 (555) 123-4567");
-    setUsername(fallbackMetadata?.username || "");
+    setFullName(user?.user_metadata?.full_name || user?.user_metadata?.name || "");
+    setLastName(user?.user_metadata?.last_name || "user");
+    setPhoneNumber(user?.user_metadata?.phone || "+1 (555) 123-4567");
+    setUsername(user?.user_metadata?.username || "");
     setNewEmail(user?.email || "");
-    setGlobalEmail(user?.email || "");
-    setAvatarUrl(fallbackMetadata?.avatar_url || "");
-
-    if (!user?.id) return;
-    getGlobalProfile()
-      .then((globalUser) => {
-        const metadata = globalUser?.user_metadata || {};
-        setFullName(metadata?.full_name || metadata?.name || fallbackMetadata?.full_name || fallbackMetadata?.name || "");
-        setLastName(metadata?.last_name || fallbackMetadata?.last_name || "user");
-        setPhoneNumber(metadata?.phone || fallbackMetadata?.phone || "+1 (555) 123-4567");
-        setUsername(metadata?.username || fallbackMetadata?.username || "");
-        setNewEmail(globalUser?.email || user?.email || "");
-        setGlobalEmail(globalUser?.email || user?.email || "");
-        setAvatarUrl(metadata?.avatar_url || fallbackMetadata?.avatar_url || "");
-      })
-      .catch(() => {
-        // Fall back to auth user metadata if global profile is unavailable.
-      });
+    setAvatarUrl(user?.user_metadata?.avatar_url || "");
   }, [user?.id]);
 
   useEffect(() => {
@@ -538,15 +519,16 @@ export default function Profile() {
         name: combinedName || normalizedFullName,
         phone: phoneNumber,
         username,
-        email: newEmail,
         avatar_url: avatarUrl,
       });
 
-      if (newEmail !== globalEmail) {
-        setGlobalEmail(newEmail);
+      if (newEmail !== user?.email) {
+        await updateEmail(newEmail);
         logAuditEvent({ type: "email_changed", user_id: user?.id });
+        toast.success("Email change confirmation sent");
+      } else {
+        toast.success("Profile updated");
       }
-      toast.success("Profile updated");
     } catch (err: any) {
       toast.error(err.message || "Failed to save");
     } finally {
@@ -789,7 +771,7 @@ export default function Profile() {
 
                   <div>
                     <p style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>{displayName}</p>
-                    <p style={{ margin: 0, color: "#6b7280", fontSize: 12 }}>{globalEmail || user?.email}</p>
+                    <p style={{ margin: 0, color: "#6b7280", fontSize: 12 }}>{user?.email}</p>
                   </div>
                 </div>
 
@@ -812,7 +794,7 @@ export default function Profile() {
                 <div style={{ marginTop: 12 }}>
                   <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Email</Label>
                   <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="bg-secondary/50 border-border/60" />
-                  {newEmail !== globalEmail && <p style={{ margin: "6px 0 0", color: "#e8425a", fontSize: 12 }}>Global profile email will be updated</p>}
+                  {newEmail !== user?.email && <p style={{ margin: "6px 0 0", color: "#e8425a", fontSize: 12 }}>Change email requested</p>}
                 </div>
 
                 <div style={{ marginTop: 12 }}>
