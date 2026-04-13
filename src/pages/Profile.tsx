@@ -572,31 +572,12 @@ export default function Profile() {
 
     setUploadingAvatar(true);
     try {
-      const ext = file.name.split(".").pop();
-      const fileName = `${user?.id}-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("avatars").upload(fileName, file, { upsert: true });
-
-      if (!error) {
-        const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
-        await updateProfile({ avatar_url: data.publicUrl });
-        setAvatarUrl(data.publicUrl);
-        toast.success("Avatar updated");
-        return;
-      }
-
       const dataUrl = await fileToCompressedDataUrl(file);
       await updateProfile({ avatar_url: dataUrl });
       setAvatarUrl(dataUrl);
       toast.success("Avatar updated locally");
     } catch (err: any) {
-      try {
-        const dataUrl = await fileToCompressedDataUrl(file);
-        await updateProfile({ avatar_url: dataUrl });
-        setAvatarUrl(dataUrl);
-        toast.success("Avatar updated locally");
-      } catch {
-        toast.error(err.message || "Upload failed");
-      }
+      toast.error(err.message || "Upload failed");
     } finally {
       setUploadingAvatar(false);
     }
