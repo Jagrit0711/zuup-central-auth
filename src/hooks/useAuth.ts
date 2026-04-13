@@ -24,38 +24,34 @@ async function postJsonWithFallback(
   timeoutMs: number,
   timeoutMessage: string,
 ) {
-  let lastError: Error | null = null;
+  let lastNotFoundError: Error | null = null;
 
   for (const url of urls) {
-    try {
-      const response = await withTimeout(
-        fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        }),
-        timeoutMs,
-        timeoutMessage,
-      );
+    const response = await withTimeout(
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      }),
+      timeoutMs,
+      timeoutMessage,
+    );
 
-      if (response.status === 404) {
-        lastError = new Error("otp_route_not_found");
-        continue;
-      }
-
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(body?.message || body?.error || "Request failed");
-      }
-
-      return body;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
+    if (response.status === 404) {
+      lastNotFoundError = new Error("otp_route_not_found");
+      continue;
     }
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body?.message || body?.error || "Request failed");
+    }
+
+    return body;
   }
 
-  throw lastError || new Error("Request failed");
+  throw lastNotFoundError || new Error("Request failed");
 }
 
 export function useAuth() {

@@ -1,5 +1,7 @@
 {
   "rewrites": [
+    { "source": "/api/account/otp/request", "destination": "/api/account/otp-request" },
+    { "source": "/api/account/otp/verify", "destination": "/api/account/otp-verify" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

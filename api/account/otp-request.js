@@ -7,6 +7,9 @@ function getMailConfig() {
     host: process.env.SMTP_HOST || "smtp.office365.com",
     port: Number(process.env.SMTP_PORT || 587),
     secure: false,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
       user: process.env.SMTP_USER || process.env.OUTBOUND_SMTP_USER || "",
       pass: process.env.SMTP_PASS || process.env.OUTBOUND_SMTP_PASS || "",
@@ -38,9 +41,40 @@ async function sendOtpEmail({ to, code, purpose }) {
   });
 }
 
+function getMissingSmtpVars() {
+  const required = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"];
+  return required.filter((name) => !process.env[name]);
+}
+
+function toSafeErrorMessage(error) {
+  const msg = String(error?.message || error || "otp_send_failed");
+  if (/Invalid login|EAUTH|535|Authentication unsuccessful/i.test(msg)) {
+    return "SMTP authentication failed. Verify SMTP_USER/SMTP_PASS and mailbox SMTP AUTH policy.";
+  }
+  if (/ETIMEDOUT|timeout|ESOCKET|ECONNECTION|EHOSTUNREACH/i.test(msg)) {
+    return "SMTP connection timed out. Verify SMTP host/port and firewall/network policy.";
+  }
+  return msg;
+}
+
 export default async function handler(req, res) {
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    return res.status(204).end();
+  }
+
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "method_not_allowed", expected: ["POST"] });
+    return res.status(405).json({ error: "method_not_allowed", expected: ["POST", "OPTIONS"] });
+  }
+
+  const missingVars = getMissingSmtpVars();
+  if (missingVars.length > 0) {
+    return res.status(500).json({
+      error: "smtp_not_configured",
+      message: `Missing SMTP env vars: ${missingVars.join(", ")}`,
+    });
   }
 
   let body;
@@ -73,7 +107,10 @@ export default async function handler(req, res) {
     await storeOtpCode({ email, purpose: intent, code, metadata });
     await sendOtpEmail({ to: email, code, purpose: intent });
   } catch (error) {
-    return res.status(500).json({ error: "otp_send_failed", message: error.message });
+    return res.status(500).json({
+      error: "otp_send_failed",
+      message: toSafeErrorMessage(error),
+    });
   }
 
   return res.status(200).json({ ok: true, sent: true, user_id: user?.id || null });
