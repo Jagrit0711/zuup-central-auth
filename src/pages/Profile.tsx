@@ -151,6 +151,10 @@ const APP_SHOWCASE = [
   { name: "Zuup Schools", url: "https://zuup.dev/schools" },
 ];
 
+function appPreviewUrl(url: string, seed: number): string {
+  return `https://image.thum.io/get/width/1200/crop/700/noanimate/${encodeURIComponent(url)}?v=${seed}`;
+}
+
 const REVOKED_CONNECTED_APPS_KEY = "zuup_revoked_connected_apps";
 
 function scopeToPermission(scope: string): string {
@@ -314,6 +318,8 @@ export default function Profile() {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [creatingKey, setCreatingKey] = useState(false);
+  const [previewSeed, setPreviewSeed] = useState<number>(() => Date.now());
+  const [brokenPreviews, setBrokenPreviews] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setAuditLog(getAuditLog());
@@ -848,7 +854,27 @@ export default function Profile() {
               </div>
 
               <div style={card}>
-                <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600 }}>Zuup Apps Network</p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Zuup Apps Network</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPreviewSeed(Date.now());
+                      setBrokenPreviews({});
+                    }}
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.03)",
+                      color: "#9ca3af",
+                      borderRadius: 8,
+                      fontSize: 11,
+                      padding: "5px 9px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Reload photos
+                  </button>
+                </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
                   {APP_SHOWCASE.map((app) => (
                     <a
@@ -856,13 +882,27 @@ export default function Profile() {
                       href={app.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, background: "rgba(255,255,255,0.02)", color: "#e8eaf0", padding: 12 }}
+                      style={{ textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, background: "rgba(255,255,255,0.02)", color: "#e8eaf0", overflow: "hidden" }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      {!brokenPreviews[app.url] ? (
+                        <img
+                          src={appPreviewUrl(app.url, previewSeed)}
+                          alt={app.name}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onError={() => setBrokenPreviews((prev) => ({ ...prev, [app.url]: true }))}
+                          style={{ width: "100%", height: 118, objectFit: "cover", display: "block", background: "#161a22" }}
+                        />
+                      ) : (
+                        <div style={{ height: 118, background: "linear-gradient(135deg, rgba(232,66,90,0.16), rgba(16,24,39,0.8))", display: "grid", placeItems: "center", color: "#e8eaf0", fontSize: 12 }}>
+                          Preview unavailable
+                        </div>
+                      )}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: 12 }}>
                         <span style={{ fontSize: 13, fontWeight: 600 }}>{app.name}</span>
                         <Globe size={14} style={{ color: "#e8425a" }} />
                       </div>
-                      <div style={{ marginTop: 8, color: "#9ca3af", fontSize: 11, wordBreak: "break-all" }}>
+                      <div style={{ margin: "0 12px 12px", color: "#9ca3af", fontSize: 11, wordBreak: "break-all" }}>
                         {app.url.replace("https://", "")}
                       </div>
                     </a>
