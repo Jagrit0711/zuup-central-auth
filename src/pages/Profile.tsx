@@ -151,10 +151,6 @@ const APP_SHOWCASE = [
   { name: "Zuup Schools", url: "https://zuup.dev/schools" },
 ];
 
-function appPreviewUrl(url: string): string {
-  return `https://image.thum.io/get/width/1200/crop/700/noanimate/${encodeURIComponent(url)}`;
-}
-
 const REVOKED_CONNECTED_APPS_KEY = "zuup_revoked_connected_apps";
 
 function scopeToPermission(scope: string): string {
@@ -224,6 +220,36 @@ function parseDevice(userAgent: string): { device: string; browser: string } {
   return { browser, device };
 }
 
+function fileToCompressedDataUrl(file: File, maxSize = 320): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
+        const width = Math.round(img.width * scale);
+        const height = Math.round(img.height * scale);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Could not process image"));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.onerror = () => reject(new Error("Invalid image file"));
+      img.src = String(reader.result || "");
+    };
+    reader.onerror = () => reject(new Error("Failed to read image file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Profile() {
   const { user, session, signOut, updateProfile, updateEmail, updatePassword } = useAuth();
   const navigate = useNavigate();
@@ -245,10 +271,6 @@ export default function Profile() {
   const [username, setUsername] = useState(user?.user_metadata?.username || "");
   const [newEmail, setNewEmail] = useState(user?.email || "");
   const [avatarUrl, setAvatarUrl] = useState(user?.user_metadata?.avatar_url || "");
-  const [coverImageUrl, setCoverImageUrl] = useState(user?.user_metadata?.cover_image_url || "");
-  const [photoOne, setPhotoOne] = useState((user?.user_metadata?.gallery_images || [])[0] || "");
-  const [photoTwo, setPhotoTwo] = useState((user?.user_metadata?.gallery_images || [])[1] || "");
-  const [photoThree, setPhotoThree] = useState((user?.user_metadata?.gallery_images || [])[2] || "");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -340,11 +362,6 @@ export default function Profile() {
     setUsername(user?.user_metadata?.username || "");
     setNewEmail(user?.email || "");
     setAvatarUrl(user?.user_metadata?.avatar_url || "");
-    setCoverImageUrl(user?.user_metadata?.cover_image_url || "");
-    const galleryImages = Array.isArray(user?.user_metadata?.gallery_images) ? user?.user_metadata?.gallery_images : [];
-    setPhotoOne(galleryImages[0] || "");
-    setPhotoTwo(galleryImages[1] || "");
-    setPhotoThree(galleryImages[2] || "");
   }, [user?.id]);
 
   useEffect(() => {
@@ -441,7 +458,6 @@ export default function Profile() {
         code: mfaVerifyCode,
       } as any);
       if (verified.error) throw verified.error;
-
       setMfaEnabled(true);
       setMfaQrCode(null);
       setMfaVerifyCode("");
@@ -558,13 +574,26 @@ export default function Profile() {
     try {
       const ext = file.name.split(".").pop();
       const fileName = `${user?.id}-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("avatars").upload(fileName, file);
-      if (error) throw error;
+      const { error } = await supabase.storage.from("avatars").upload(fileName, file, { upsert: true });
 
-      const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
-      await updateProfile({ avatar_url: data.publicUrl });
-      setAvatarUrl(data.publicUrl);
-      toast.success("Avatar updated");
+      if (!error) {
+        const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
+        await updateProfile({ avatar_url: data.publicUrl });
+        setAvatarUrl(data.publicUrl);
+        toast.success("Avatar updated");
+        return;
+      }
+
+      const message = String(error?.message || "").toLowerCase();
+      if (message.includes("bucket not found")) {
+        const dataUrl = await fileToCompressedDataUrl(file);
+        await updateProfile({ avatar_url: dataUrl });
+        setAvatarUrl(dataUrl);
+        toast.success("Avatar updated");
+        return;
+      }
+
+      throw error;
     } catch (err: any) {
       toast.error(err.message || "Upload failed");
     } finally {
@@ -584,10 +613,6 @@ export default function Profile() {
       const normalizedCity = String(city || "").trim();
       const normalizedStateRegion = String(stateRegion || "").trim();
       const normalizedPostalCode = String(postalCode || "").trim();
-      const normalizedCoverImage = String(coverImageUrl || "").trim();
-      const galleryImages = [photoOne, photoTwo, photoThree]
-        .map((photo) => String(photo || "").trim())
-        .filter(Boolean);
       const combinedName = `${normalizedFullName} ${normalizedLastName}`.trim();
       const fullPhone = normalizedPhone ? `${mobileCountryCode} ${normalizedPhone}`.trim() : "";
 
@@ -616,8 +641,8 @@ export default function Profile() {
         },
         username,
         avatar_url: avatarUrl,
-        cover_image_url: normalizedCoverImage,
-        gallery_images: galleryImages,
+        cover_image_url: null,
+        gallery_images: [],
       });
 
       if (newEmail !== user?.email) {
@@ -831,18 +856,13 @@ export default function Profile() {
                       href={app.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, overflow: "hidden", background: "rgba(255,255,255,0.02)", color: "#e8eaf0" }}
+                      style={{ textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, background: "rgba(255,255,255,0.02)", color: "#e8eaf0", padding: 12 }}
                     >
-                      <img
-                        src={appPreviewUrl(app.url)}
-                        alt={app.name}
-                        style={{ width: "100%", height: 118, objectFit: "cover", display: "block", background: "#161a22" }}
-                      />
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                         <span style={{ fontSize: 13, fontWeight: 600 }}>{app.name}</span>
                         <Globe size={14} style={{ color: "#e8425a" }} />
                       </div>
-                      <div style={{ padding: "0 10px 10px", color: "#9ca3af", fontSize: 11, wordBreak: "break-all" }}>
+                      <div style={{ marginTop: 8, color: "#9ca3af", fontSize: 11, wordBreak: "break-all" }}>
                         {app.url.replace("https://", "")}
                       </div>
                     </a>
@@ -982,35 +1002,6 @@ export default function Profile() {
                   <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Postal code</Label>
                   <Input value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder="Postal / ZIP code" className="bg-secondary/50 border-border/60" />
                 </div>
-
-                <div style={{ marginTop: 14 }}>
-                  <p style={{ margin: "0 0 10px", fontWeight: 600, fontSize: 14 }}>Images</p>
-                  <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Cover image URL</Label>
-                  <Input value={coverImageUrl} onChange={(e) => setCoverImageUrl(e.target.value)} placeholder="https://..." className="bg-secondary/50 border-border/60" />
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginTop: 12 }}>
-                  <div>
-                    <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Extra photo URL 1</Label>
-                    <Input value={photoOne} onChange={(e) => setPhotoOne(e.target.value)} placeholder="https://..." className="bg-secondary/50 border-border/60" />
-                  </div>
-                  <div>
-                    <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Extra photo URL 2</Label>
-                    <Input value={photoTwo} onChange={(e) => setPhotoTwo(e.target.value)} placeholder="https://..." className="bg-secondary/50 border-border/60" />
-                  </div>
-                  <div>
-                    <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Extra photo URL 3</Label>
-                    <Input value={photoThree} onChange={(e) => setPhotoThree(e.target.value)} placeholder="https://..." className="bg-secondary/50 border-border/60" />
-                  </div>
-                </div>
-
-                {(coverImageUrl || photoOne || photoTwo || photoThree) && (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginTop: 12 }}>
-                    {[coverImageUrl, photoOne, photoTwo, photoThree].filter(Boolean).map((photo, idx) => (
-                      <img key={`${photo}-${idx}`} src={photo} alt={`profile-media-${idx + 1}`} style={{ width: "100%", height: 86, objectFit: "cover", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "#111318" }} />
-                    ))}
-                  </div>
-                )}
 
                 <div style={{ marginTop: 12 }}>
                   <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Email</Label>
