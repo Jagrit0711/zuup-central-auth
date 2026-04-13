@@ -15,6 +15,20 @@ function resolveTokenEndpoint() {
   return `${base.replace(/\/+$/, "")}/auth/v1/oauth/token`;
 }
 
+function buildTokenAuthHeaders(clientId, clientSecret) {
+  const method = (process.env.ZUUP_CLIENT_AUTH_METHOD || "client_secret_basic").trim();
+  if (method === "client_secret_post") {
+    return { mode: "client_secret_post", headers: {} };
+  }
+  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  return {
+    mode: "client_secret_basic",
+    headers: {
+      Authorization: `Basic ${basic}`,
+    },
+  };
+}
+
 function parseBody(req) {
   let body = req.body || {};
   if (typeof body === "string") {
@@ -94,19 +108,26 @@ export default async function handler(req, res) {
   }
 
   const tokenEndpoint = resolveTokenEndpoint();
+  const auth = buildTokenAuthHeaders(creds.clientId, creds.clientSecret);
   const tokenParams = new URLSearchParams({
     grant_type: "authorization_code",
     client_id: creds.clientId,
-    client_secret: creds.clientSecret,
     code,
     redirect_uri,
     code_verifier,
   });
 
+  if (auth.mode === "client_secret_post") {
+    tokenParams.set("client_secret", creds.clientSecret);
+  }
+
   try {
     const upstream = await fetch(tokenEndpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        ...auth.headers,
+      },
       body: tokenParams,
     });
 
