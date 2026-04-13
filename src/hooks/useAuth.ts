@@ -152,8 +152,9 @@ export function useAuth() {
   };
 
   const updateEmail = async (email: string) => {
-    const { error } = await supabase.auth.updateUser({ email });
+    const { data, error } = await supabase.auth.updateUser({ email });
     if (error) throw error;
+    return data;
   };
 
   const refreshSession = async () => {

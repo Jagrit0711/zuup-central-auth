@@ -108,6 +108,24 @@ const BUILTIN_APPS: RegisteredApp[] = [
 
 const ALL_SCOPES = ["openid", "profile", "email", "offline_access", "zuup:read", "zuup:write", "zuup:admin"];
 
+const COUNTRY_LIST = [
+  "United States",
+  "India",
+  "United Kingdom",
+  "Canada",
+  "Australia",
+  "Germany",
+  "France",
+  "Singapore",
+  "United Arab Emirates",
+  "Japan",
+  "Netherlands",
+  "Brazil",
+  "South Africa",
+  "Mexico",
+  "Other",
+];
+
 const REVOKED_CONNECTED_APPS_KEY = "zuup_revoked_connected_apps";
 
 function scopeToPermission(scope: string): string {
@@ -187,6 +205,7 @@ export default function Profile() {
 
   const [fullName, setFullName] = useState(user?.user_metadata?.full_name || user?.user_metadata?.name || "");
   const [lastName, setLastName] = useState(user?.user_metadata?.last_name || "");
+  const [country, setCountry] = useState(user?.user_metadata?.country || "");
   const [phoneNumber, setPhoneNumber] = useState(user?.user_metadata?.phone || "");
   const [username, setUsername] = useState(user?.user_metadata?.username || "");
   const [newEmail, setNewEmail] = useState(user?.email || "");
@@ -271,6 +290,7 @@ export default function Profile() {
   useEffect(() => {
     setFullName(user?.user_metadata?.full_name || user?.user_metadata?.name || "");
     setLastName(user?.user_metadata?.last_name || "");
+    setCountry(user?.user_metadata?.country || "");
     setPhoneNumber(user?.user_metadata?.phone || "");
     setUsername(user?.user_metadata?.username || "");
     setNewEmail(user?.email || "");
@@ -510,22 +530,27 @@ export default function Profile() {
     try {
       const normalizedFullName = String(fullName || "").trim();
       const normalizedLastName = String(lastName || "").trim();
+      const normalizedCountry = String(country || "").trim();
+      const normalizedPhone = String(phoneNumber || "").trim();
       const combinedName = `${normalizedFullName} ${normalizedLastName}`.trim();
 
       await updateProfile({
         full_name: normalizedFullName,
         first_name: normalizedFullName,
         last_name: normalizedLastName,
+        country: normalizedCountry,
         name: combinedName || normalizedFullName,
-        phone: phoneNumber,
+        phone: normalizedPhone,
+        phone_number: normalizedPhone,
         username,
         avatar_url: avatarUrl,
       });
 
       if (newEmail !== user?.email) {
-        await updateEmail(newEmail);
+        const emailUpdate = await updateEmail(newEmail);
         logAuditEvent({ type: "email_changed", user_id: user?.id });
-        toast.success("Email change confirmation sent");
+        const pending = (emailUpdate as any)?.user?.new_email || newEmail;
+        toast.success(`Email change confirmation sent to ${pending}`);
       } else {
         toast.success("Profile updated");
       }
@@ -784,6 +809,31 @@ export default function Profile() {
                     <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Last name</Label>
                     <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name" className="bg-secondary/50 border-border/60" />
                   </div>
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <Label style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "block" }}>Country</Label>
+                  <select
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    style={{
+                      width: "100%",
+                      height: 40,
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.14)",
+                      background: "rgba(255,255,255,0.03)",
+                      color: "#e8eaf0",
+                      padding: "0 10px",
+                      outline: "none",
+                    }}
+                  >
+                    <option value="" style={{ color: "#111827" }}>Select country</option>
+                    {COUNTRY_LIST.map((item) => (
+                      <option key={item} value={item} style={{ color: "#111827" }}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div style={{ marginTop: 12 }}>
