@@ -119,52 +119,59 @@ export async function resolveClientCredentials(req, bodyClientId) {
 
   const singleClientId = process.env.ZUUP_CLIENT_ID;
   const singleClientSecret = process.env.ZUUP_CLIENT_SECRET;
-
-  if (singleClientId && singleClientSecret) {
-    const providedClientId = basicClientId || bodyClientId || singleClientId;
-    const providedSecret = basicClientSecret || req.body?.client_secret;
-
-    if (providedClientId !== singleClientId) {
-      return { error: "invalid_client", msg: "client_id mismatch" };
-    }
-
-    if (providedSecret && providedSecret !== singleClientSecret) {
-      return { error: "invalid_client", msg: "client_secret mismatch" };
-    }
-
-    return { clientId: singleClientId, clientSecret: singleClientSecret };
-  }
-
   const rawMap = process.env.ZUUP_CLIENT_SECRETS_JSON;
-  const clientId = basicClientId || bodyClientId;
+
+  const clientId = basicClientId || bodyClientId || "";
   const clientSecret = basicClientSecret || req.body?.client_secret;
 
-  if (!clientId) return { error: "invalid_client", msg: "Missing client_id" };
-
-  // Prefer dynamic table-backed lookup when env map is not configured.
-  if (!rawMap) {
-    const dbSecret = await getClientSecretFromDb(clientId);
-    if (!dbSecret) {
-      return { error: "invalid_client", msg: "Unknown client_id" };
+  if (!clientId) {
+    if (singleClientId && singleClientSecret) {
+      return { clientId: singleClientId, clientSecret: singleClientSecret };
     }
+    return { error: "invalid_client", msg: "Missing client_id" };
+  }
+
+  // 1) Multi-client env map (highest priority when client_id is explicitly provided)
+  if (rawMap) {
+    let map;
+    try {
+      map = JSON.parse(rawMap);
+    } catch {
+      return { error: "server_not_configured", msg: "Invalid ZUUP_CLIENT_SECRETS_JSON" };
+    }
+
+    const expected = map[clientId];
+    if (expected) {
+      if (clientSecret && clientSecret !== expected) {
+        return { error: "invalid_client", msg: "Invalid client_secret" };
+      }
+      return { clientId, clientSecret: expected };
+    }
+  }
+
+  // 2) DB-backed dynamic lookup
+  const dbSecret = await getClientSecretFromDb(clientId);
+  if (dbSecret) {
     if (clientSecret && clientSecret !== dbSecret) {
       return { error: "invalid_client", msg: "Invalid client_secret" };
     }
     return { clientId, clientSecret: dbSecret };
   }
 
-  let map;
-  try {
-    map = JSON.parse(rawMap);
-  } catch {
-    return { error: "server_not_configured", msg: "Invalid ZUUP_CLIENT_SECRETS_JSON" };
+  // 3) Single-client fallback (legacy mode)
+  if (singleClientId && singleClientSecret) {
+    if (clientId !== singleClientId) {
+      return {
+        error: "invalid_client",
+        msg: "client_id mismatch",
+        hint: "Remove ZUUP_CLIENT_ID/ZUUP_CLIENT_SECRET when using multi-client mode",
+      };
+    }
+    if (clientSecret && clientSecret !== singleClientSecret) {
+      return { error: "invalid_client", msg: "client_secret mismatch" };
+    }
+    return { clientId: singleClientId, clientSecret: singleClientSecret };
   }
 
-  const expected = map[clientId];
-  if (!expected) return { error: "invalid_client", msg: "Unknown client_id" };
-  if (clientSecret && clientSecret !== expected) {
-    return { error: "invalid_client", msg: "Invalid client_secret" };
-  }
-
-  return { clientId, clientSecret: expected };
+  return { error: "invalid_client", msg: "Unknown client_id" };
 }
