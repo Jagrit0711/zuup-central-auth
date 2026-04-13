@@ -30,7 +30,7 @@ const SCOPES = [
 const ENDPOINTS = [
   { method: "GET", path: "https://auth.zuup.dev/authorize", desc: "Initiate authorization. Redirects to login/consent." },
   { method: "POST", path: "https://auth.zuup.dev/api/oauth/token", desc: "Exchange authorization code for access + refresh tokens." },
-  { method: "GET", path: "/userinfo", desc: "Fetch the authenticated user's profile (Bearer token)." },
+  { method: "GET", path: "https://auth.zuup.dev/api/oauth/userinfo", desc: "Fetch the authenticated user's profile (Bearer token)." },
   { method: "POST", path: "/revoke", desc: "Revoke an access or refresh token." },
   { method: "GET", path: "/.well-known/openid-configuration", desc: "OIDC discovery document." },
   { method: "GET", path: "/.well-known/jwks.json", desc: "JSON Web Key Set for token verification." },
@@ -96,7 +96,7 @@ async function handleCallback() {
   }
 
   // Exchange code (do this server-side in production!)
-  const res = await fetch('/api/auth/token-exchange', {
+  const res = await fetch('https://auth.zuup.dev/api/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -110,6 +110,13 @@ async function handleCallback() {
   });
 
   const { access_token, refresh_token } = await res.json();
+
+  const userRes = await fetch('https://auth.zuup.dev/api/oauth/userinfo', {
+    headers: { Authorization: 'Bearer ' + access_token },
+  });
+  const user = await userRes.json();
+
+  console.log('Logged in as:', user?.email);
   return { access_token, refresh_token };
 }`,
   },
@@ -145,13 +152,14 @@ function LoginButton() {
 
 // In your /callback route
 async function handleCallback(code: string) {
-  // Your backend exchanges the code, returns Supabase tokens
+  // Your backend exchanges the code with Zuup Auth
   const { access_token, refresh_token } = await exchangeCode(code);
-  
-  // Set session in Supabase client
-  await supabase.auth.setSession({ access_token, refresh_token });
-  
-  const { data: { user } } = await supabase.auth.getUser();
+
+  const profileRes = await fetch('https://auth.zuup.dev/api/oauth/userinfo', {
+    headers: { Authorization: 'Bearer ' + access_token },
+  });
+  const user = await profileRes.json();
+
   console.log('Logged in as:', user?.email);
 }`,
   },

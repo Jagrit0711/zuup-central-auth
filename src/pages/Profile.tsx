@@ -200,6 +200,18 @@ export default function Profile() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [sessionIp, setSessionIp] = useState("Loading...");
+  const [sessionUserAgent, setSessionUserAgent] = useState("");
+
+  const [alertsEnabled, setAlertsEnabled] = useState<boolean>(user?.user_metadata?.security_alerts_enabled !== false);
+  const [updatingAlerts, setUpdatingAlerts] = useState(false);
+
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaQrCode, setMfaQrCode] = useState<string | null>(null);
+  const [mfaVerifyCode, setMfaVerifyCode] = useState("");
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
 
   const [auditLog, setAuditLog] = useState<AuditEvent[]>([]);
   const [revokedClientIds, setRevokedClientIds] = useState<string[]>(() => {
@@ -230,7 +242,51 @@ export default function Profile() {
     if (storedApps) setCustomApps(JSON.parse(storedApps));
     const storedKeys = localStorage.getItem("zuup_api_keys");
     if (storedKeys) setApiKeys(JSON.parse(storedKeys));
+
+    fetch("/api/account/session-context")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.ip) setSessionIp(data.ip);
+        if (data?.userAgent) setSessionUserAgent(data.userAgent);
+      })
+      .catch(() => {
+        setSessionIp("Unavailable");
+      });
+
+    if (user?.id) {
+      const storedBackupCodes = localStorage.getItem(`zuup_backup_codes_${user.id}`);
+      if (storedBackupCodes) {
+        try {
+          setBackupCodes(JSON.parse(storedBackupCodes));
+        } catch {
+          setBackupCodes([]);
+        }
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    setAlertsEnabled(user?.user_metadata?.security_alerts_enabled !== false);
+  }, [user?.user_metadata?.security_alerts_enabled]);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.auth.mfa.listFactors()
+      .then(({ data, error }) => {
+        if (error) throw error;
+        const factors = [
+          ...(data?.totp || []),
+          ...(data?.all || []),
+        ];
+        const active = factors.find((factor: any) => factor.status === "verified") || factors[0];
+        setMfaEnabled(Boolean(active));
+        setMfaFactorId(active?.id || null);
+      })
+      .catch(() => {
+        setMfaEnabled(false);
+        setMfaFactorId(null);
+      });
+  }, [user]);
 
   useEffect(() => {
     localStorage.setItem("zuup_dev_mode", devMode ? "true" : "false");
@@ -261,6 +317,106 @@ export default function Profile() {
       method: "Email",
     };
   }, [user?.created_at, user?.last_sign_in_at, session?.expires_at]);
+
+  const generateBackupCodes = () => {
+    const codes = Array.from({ length: 8 }, () => generateSecureRandom(4).toUpperCase());
+    setBackupCodes(codes);
+    if (user?.id) {
+      localStorage.setItem(`zuup_backup_codes_${user.id}`, JSON.stringify(codes));
+    }
+  };
+
+  const handleEnableTotp = async () => {
+    setMfaLoading(true);
+    try {
+      const { data, error } = await supabase.auth.mfa.enroll({
+        factorType: "totp",
+        friendlyName: "Zuup Authenticator",
+        issuer: "Zuup",
+      } as any);
+      if (error) throw error;
+      setMfaFactorId(data.id);
+      setMfaQrCode(data?.totp?.qr_code || null);
+      toast.success("Scan the QR code and verify with a 6-digit code");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to start 2FA setup");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleVerifyTotp = async () => {
+    if (!mfaFactorId) {
+      toast.error("No pending authenticator setup found");
+      return;
+    }
+    if (!/^\d{6}$/.test(mfaVerifyCode)) {
+      toast.error("Enter a valid 6-digit authenticator code");
+      return;
+    }
+
+    setMfaLoading(true);
+    try {
+      const challenge = await supabase.auth.mfa.challenge({ factorId: mfaFactorId } as any);
+      if (challenge.error) throw challenge.error;
+
+      const verified = await supabase.auth.mfa.verify({
+        factorId: mfaFactorId,
+        challengeId: challenge.data.id,
+        code: mfaVerifyCode,
+      } as any);
+      if (verified.error) throw verified.error;
+
+      setMfaEnabled(true);
+      setMfaQrCode(null);
+      setMfaVerifyCode("");
+      generateBackupCodes();
+      logAuditEvent({ type: "2fa_enabled", user_id: user?.id });
+      toast.success("Two-factor authentication enabled");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to verify authenticator code");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleDisableTotp = async () => {
+    if (!mfaFactorId) return;
+    setMfaLoading(true);
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaFactorId } as any);
+      if (error) throw error;
+      setMfaEnabled(false);
+      setMfaFactorId(null);
+      setMfaQrCode(null);
+      setMfaVerifyCode("");
+      setBackupCodes([]);
+      if (user?.id) {
+        localStorage.removeItem(`zuup_backup_codes_${user.id}`);
+      }
+      logAuditEvent({ type: "2fa_disabled", user_id: user?.id });
+      toast.success("Two-factor authentication disabled");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to disable 2FA");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleToggleAlerts = async () => {
+    setUpdatingAlerts(true);
+    try {
+      await updateProfile({
+        security_alerts_enabled: !alertsEnabled,
+      } as any);
+      setAlertsEnabled((prev) => !prev);
+      toast.success(!alertsEnabled ? "Security alert emails enabled" : "Security alert emails disabled");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update alert settings");
+    } finally {
+      setUpdatingAlerts(false);
+    }
+  };
 
   const allDevApps = [...BUILTIN_APPS, ...customApps];
 
@@ -689,7 +845,7 @@ export default function Profile() {
                   </div>
                   <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 12 }}>
                     <p style={{ margin: "0 0 6px", color: "#9ca3af", fontSize: 12 }}>IP Address</p>
-                    <p style={{ margin: 0, fontSize: 13 }}>{sessionInfo.ip}</p>
+                    <p style={{ margin: 0, fontSize: 13 }}>{sessionIp || sessionInfo.ip}</p>
                   </div>
                   <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 12 }}>
                     <p style={{ margin: "0 0 6px", color: "#9ca3af", fontSize: 12 }}>Login method</p>
@@ -700,24 +856,80 @@ export default function Profile() {
                 <p style={{ margin: "12px 0 0", color: "#6b7280", fontSize: 12 }}>
                   Signed in: {new Date(sessionInfo.signedInAt).toLocaleString()} · Lasts until: {sessionInfo.expiresAt ? new Date(sessionInfo.expiresAt).toLocaleString() : "Unknown"}
                 </p>
+                <p style={{ margin: "6px 0 0", color: "#6b7280", fontSize: 12 }}>
+                  Session browser: {sessionUserAgent || "Unavailable"}
+                </p>
               </div>
 
               <div style={card}>
                 <p style={{ margin: "0 0 10px", fontWeight: 600 }}>Authenticator App</p>
                 <p style={{ margin: "0 0 12px", fontSize: 13, color: "#9ca3af" }}>Add an extra layer of security by requiring a code from an authenticator app.</p>
-                <Button variant="outline" onClick={() => toast.message("2FA setup flow not wired yet")}>Set up two-factor authentication</Button>
+                {!mfaEnabled && !mfaQrCode && (
+                  <Button variant="outline" onClick={handleEnableTotp} disabled={mfaLoading}>
+                    {mfaLoading ? <RefreshCw className="animate-spin" size={14} /> : <Shield size={14} />} Set up two-factor authentication
+                  </Button>
+                )}
+
+                {!mfaEnabled && mfaQrCode && (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <p style={{ margin: 0, fontSize: 12, color: "#6b7280" }}>Scan this QR in Google Authenticator/Authy, then enter the 6-digit code.</p>
+                    <img src={mfaQrCode} alt="2FA QR" style={{ width: 180, height: 180, borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "white", padding: 8 }} />
+                    <Input
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      placeholder="Enter 6-digit code"
+                      value={mfaVerifyCode}
+                      onChange={(e) => setMfaVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      className="bg-secondary/50 border-border/60"
+                    />
+                    <Button className="zuup-gradient" onClick={handleVerifyTotp} disabled={mfaLoading}>
+                      {mfaLoading ? <RefreshCw className="animate-spin" size={14} /> : <Check size={14} />} Verify and enable
+                    </Button>
+                  </div>
+                )}
+
+                {mfaEnabled && (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <p style={{ margin: 0, fontSize: 13, color: "#10b981" }}>Two-factor authentication is enabled.</p>
+                    <Button variant="outline" onClick={handleDisableTotp} disabled={mfaLoading}>
+                      {mfaLoading ? <RefreshCw className="animate-spin" size={14} /> : <Trash2 size={14} />} Disable 2FA
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <div style={card}>
                 <p style={{ margin: "0 0 10px", fontWeight: 600 }}>Passkeys</p>
                 <p style={{ margin: "0 0 12px", fontSize: 13, color: "#9ca3af" }}>Sign in securely using a passkey stored on your device.</p>
-                <Button variant="outline" onClick={() => toast.message("Passkey flow not wired yet")}>Set up passkey</Button>
+                <Button variant="outline" onClick={() => toast.message("Passkeys require WebAuthn backend wiring; planned next")}>Set up passkey</Button>
               </div>
 
               <div style={card}>
                 <p style={{ margin: "0 0 10px", fontWeight: 600 }}>Backup Codes</p>
-                <p style={{ margin: "0 0 12px", fontSize: 13, color: "#9ca3af" }}>No backup codes available. Set up 2FA first to generate backup codes.</p>
-                <Button variant="outline" disabled>Generate backup codes</Button>
+                <p style={{ margin: "0 0 12px", fontSize: 13, color: "#9ca3af" }}>
+                  {backupCodes.length > 0 ? "Store these in a safe place. Each code can be used once." : "No backup codes available. Enable 2FA first to generate backup codes."}
+                </p>
+                {backupCodes.length > 0 && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                    {backupCodes.map((code) => (
+                      <div key={code} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: "7px 10px", fontFamily: "monospace", fontSize: 12 }}>
+                        {code}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Button variant="outline" onClick={generateBackupCodes} disabled={!mfaEnabled}>Generate backup codes</Button>
+              </div>
+
+              <div style={card}>
+                <p style={{ margin: "0 0 10px", fontWeight: 600 }}>Security Alert Emails</p>
+                <p style={{ margin: "0 0 12px", fontSize: 13, color: "#9ca3af" }}>
+                  Send an email when your account logs in from a new request with browser and IP details.
+                </p>
+                <Button variant="outline" onClick={handleToggleAlerts} disabled={updatingAlerts}>
+                  {updatingAlerts ? <RefreshCw className="animate-spin" size={14} /> : <Mail size={14} />} {alertsEnabled ? "Disable alerts" : "Enable alerts"}
+                </Button>
               </div>
 
               <div style={card}>
