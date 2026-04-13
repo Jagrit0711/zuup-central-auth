@@ -584,18 +584,19 @@ export default function Profile() {
         return;
       }
 
-      const message = String(error?.message || "").toLowerCase();
-      if (message.includes("bucket not found")) {
+      const dataUrl = await fileToCompressedDataUrl(file);
+      await updateProfile({ avatar_url: dataUrl });
+      setAvatarUrl(dataUrl);
+      toast.success("Avatar updated locally");
+    } catch (err: any) {
+      try {
         const dataUrl = await fileToCompressedDataUrl(file);
         await updateProfile({ avatar_url: dataUrl });
         setAvatarUrl(dataUrl);
-        toast.success("Avatar updated");
-        return;
+        toast.success("Avatar updated locally");
+      } catch {
+        toast.error(err.message || "Upload failed");
       }
-
-      throw error;
-    } catch (err: any) {
-      toast.error(err.message || "Upload failed");
     } finally {
       setUploadingAvatar(false);
     }
@@ -865,16 +866,10 @@ export default function Profile() {
                         alt={app.name}
                         loading="lazy"
                         onError={(event) => {
-                          const target = event.currentTarget;
-                          target.style.display = "none";
-                          const fallback = target.parentElement?.querySelector(".app-image-fallback") as HTMLDivElement | null;
-                          if (fallback) fallback.style.display = "grid";
+                          event.currentTarget.src = "/images/zuup.png";
                         }}
                         style={{ width: "100%", height: 118, objectFit: "cover", display: "block", background: "#161a22" }}
                       />
-                      <div className="app-image-fallback" style={{ display: "none", height: 118, background: "linear-gradient(135deg, rgba(232,66,90,0.16), rgba(16,24,39,0.8))", placeItems: "center", color: "#e8eaf0", fontSize: 12 }}>
-                        {app.name}
-                      </div>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: 12 }}>
                         <span style={{ fontSize: 13, fontWeight: 600 }}>{app.name}</span>
                         <Globe size={14} style={{ color: "#e8425a" }} />
