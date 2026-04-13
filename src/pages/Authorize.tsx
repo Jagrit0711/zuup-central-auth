@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import {
   buildSuccessRedirect,
   buildErrorRedirect,
@@ -57,6 +58,13 @@ export default function Authorize() {
   const [codeSent, setCodeSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+  const [mfaPending, setMfaPending] = useState(false);
+  const [pendingMethod, setPendingMethod] = useState<"email_password" | "email_code" | null>(null);
+  const codeSubmitInFlightRef = useRef(false);
 
   const notifySecurityLogin = async (method: "email_password" | "email_code") => {
     try {
@@ -77,13 +85,90 @@ export default function Authorize() {
 
   useEffect(() => {
     if (phase !== "login" || loginMode !== "code") return;
+    if (mfaRequired) return;
     if (!codeSent || submitting) return;
     if (code.length !== 6) return;
     void handleCodeLogin();
-  }, [code, codeSent, loginMode, phase, submitting]);
+  }, [code, codeSent, loginMode, mfaRequired, phase, submitting]);
+
+  const completeLogin = async (method: "email_password" | "email_code", userId: string) => {
+    await notifySecurityLogin(method);
+    toast.success("Authenticated!");
+    if (validatedReq?.client?.is_first_party) {
+      await issueCodeAndRedirect(validatedReq, userId);
+      return;
+    }
+    setPhase("consent");
+  };
+
+  const maybeStartMfa = async () => {
+    const factorsResult = await supabase.auth.mfa.listFactors();
+    if (factorsResult.error) throw factorsResult.error;
+
+    const factors = [
+      ...(factorsResult.data?.totp || []),
+      ...(factorsResult.data?.all || []),
+    ];
+    const verifiedFactor = factors.find((factor: any) => factor?.status === "verified");
+    if (!verifiedFactor?.id) return false;
+
+    setMfaPending(true);
+    const challenge = await supabase.auth.mfa.challenge({ factorId: verifiedFactor.id } as any);
+    if (challenge.error) {
+      setMfaPending(false);
+      throw challenge.error;
+    }
+
+    setMfaFactorId(verifiedFactor.id);
+    setMfaChallengeId(challenge.data.id);
+    setMfaRequired(true);
+    setPhase("login");
+    toast.message("Enter your 2FA authenticator code");
+    return true;
+  };
+
+  const handleMfaVerify = async () => {
+    if (!mfaFactorId || !mfaChallengeId) {
+      toast.error("Two-factor challenge missing. Sign in again.");
+      return;
+    }
+    if (!/^\d{6}$/.test(mfaCode)) {
+      toast.error("Enter a valid 6-digit authenticator code");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const verify = await supabase.auth.mfa.verify({
+        factorId: mfaFactorId,
+        challengeId: mfaChallengeId,
+        code: mfaCode,
+      } as any);
+      if (verify.error) throw verify.error;
+
+      const userId = verify.data?.user?.id || session?.user?.id;
+      if (!userId) throw new Error("Could not resolve signed-in user");
+
+      const method = pendingMethod || "email_password";
+      setMfaRequired(false);
+      setMfaPending(false);
+      setMfaCode("");
+      setMfaFactorId(null);
+      setMfaChallengeId(null);
+      setPendingMethod(null);
+
+      await completeLogin(method, userId);
+    } catch (err: any) {
+      toast.error(err.message || "Invalid authenticator code");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleCodeLogin = async () => {
     if (!validatedReq) return;
+    if (codeSubmitInFlightRef.current) return;
+    codeSubmitInFlightRef.current = true;
     setSubmitting(true);
     try {
       if (!codeSent) {
@@ -94,20 +179,24 @@ export default function Authorize() {
       }
 
       const data = await verifyEmailCode(email, code, "login");
-      await notifySecurityLogin("email_code");
-      toast.success("Authenticated!");
-      if (data.session) {
-        if (validatedReq.client.is_first_party) {
-          await issueCodeAndRedirect(validatedReq, data.session.user.id);
-        } else {
-          setPhase("consent");
-        }
+      setCode("");
+      setCodeSent(false);
+
+      const mfaStarted = await maybeStartMfa();
+      if (mfaStarted) {
+        setPendingMethod("email_code");
+        return;
       }
+
+      const userId = data.session?.user?.id || data.user?.id;
+      if (!userId) throw new Error("Could not resolve signed-in user");
+      await completeLogin("email_code", userId);
     } catch (err: any) {
       logAuditEvent({ type: "login_failed", details: { email, reason: err.message } });
       toast.error(err.message || "Invalid code");
     } finally {
       setSubmitting(false);
+      codeSubmitInFlightRef.current = false;
     }
   };
 
@@ -137,6 +226,10 @@ export default function Authorize() {
   // Step 2: If already logged in, go straight to consent (or auto-approve for first-party)
   useEffect(() => {
     if (!validatedReq || loading) return;
+    if (mfaPending) {
+      setPhase("login");
+      return;
+    }
 
     if (user && session) {
       if (validatedReq.client.is_first_party) {
@@ -151,7 +244,7 @@ export default function Authorize() {
     } else {
       setPhase("login");
     }
-  }, [validatedReq, user, session, loading]);
+  }, [validatedReq, user, session, loading, mfaPending]);
 
   async function issueCodeAndRedirect(req: ValidatedRequest, userId: string) {
     setPhase("redirecting");
@@ -198,15 +291,15 @@ export default function Authorize() {
     try {
       const data = await signIn(email, password);
 
-      await notifySecurityLogin("email_password");
-      toast.success("Authenticated!");
-      if (data.session) {
-        if (validatedReq.client.is_first_party) {
-          await issueCodeAndRedirect(validatedReq, data.session.user.id);
-        } else {
-          setPhase("consent");
-        }
+      const mfaStarted = await maybeStartMfa();
+      if (mfaStarted) {
+        setPendingMethod("email_password");
+        return;
       }
+
+      const userId = data.session?.user?.id || data.user?.id;
+      if (!userId) throw new Error("Could not resolve signed-in user");
+      await completeLogin("email_password", userId);
     } catch (err: any) {
       logAuditEvent({ type: "login_failed", details: { email, reason: err.message } });
       toast.error(err.message || "Invalid credentials");
@@ -382,11 +475,33 @@ export default function Authorize() {
                 </InputOTP>
               </div>
             )}
+
+            {mfaRequired && (
+              <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/20 p-3">
+                <Label htmlFor="mfaCode">Authenticator code</Label>
+                <Input
+                  id="mfaCode"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  placeholder="Enter 6-digit 2FA code"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  className="bg-secondary/50 border-border/60"
+                />
+                <p className="text-xs text-muted-foreground">Two-factor authentication is enabled for this account.</p>
+              </div>
+            )}
           </div>
 
-          <Button type="submit" className="w-full zuup-gradient h-11" disabled={submitting}>
+          <Button
+            type={mfaRequired ? "button" : "submit"}
+            onClick={mfaRequired ? handleMfaVerify : undefined}
+            className="w-full zuup-gradient h-11"
+            disabled={submitting}
+          >
             {submitting ? <Loader2 className="animate-spin" size={18} /> : <LogIn size={18} />}
-            Continue to {validatedReq.client.name}
+            {mfaRequired ? "Verify 2FA" : `Continue to ${validatedReq.client.name}`}
           </Button>
 
           <p className="text-center text-sm text-muted-foreground">

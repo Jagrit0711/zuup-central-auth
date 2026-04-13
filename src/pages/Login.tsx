@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,13 @@ export default function Login() {
   const [sendingCode, setSendingCode] = useState(false);
   const [signInMode, setSignInMode] = useState<SignInMode>("password");
   const [codeSent, setCodeSent] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+  const [pendingMethod, setPendingMethod] = useState<"email_password" | "email_code" | null>(null);
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
+  const codeSubmitInFlightRef = useRef(false);
   const { signIn, sendEmailCode, verifyEmailCode } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -44,12 +52,88 @@ export default function Login() {
 
   useEffect(() => {
     if (signInMode !== "code") return;
+    if (mfaRequired) return;
     if (!codeSent || loading) return;
     if (code.length !== 6) return;
     void handleCodeSubmit();
-  }, [code, codeSent, loading, signInMode]);
+  }, [code, codeSent, loading, mfaRequired, signInMode]);
+
+  const finalizeSignIn = async (method: "email_password" | "email_code", userId?: string) => {
+    logAuditEvent({ type: "login", user_id: userId, details: { method } });
+    await notifySecurityLogin(method);
+    toast.success("Welcome back!");
+
+    const hasOAuthParams = searchParams.has("client_id") && searchParams.has("redirect_uri");
+    if (hasOAuthParams) {
+      navigate(`/authorize?${searchParams.toString()}`);
+      return;
+    }
+
+    navigate("/profile");
+  };
+
+  const maybeStartMfa = async () => {
+    const factorsResult = await supabase.auth.mfa.listFactors();
+    if (factorsResult.error) throw factorsResult.error;
+
+    const factors = [
+      ...(factorsResult.data?.totp || []),
+      ...(factorsResult.data?.all || []),
+    ];
+    const verifiedFactor = factors.find((factor: any) => factor?.status === "verified");
+    if (!verifiedFactor?.id) return false;
+
+    const challenge = await supabase.auth.mfa.challenge({ factorId: verifiedFactor.id } as any);
+    if (challenge.error) throw challenge.error;
+
+    setMfaFactorId(verifiedFactor.id);
+    setMfaChallengeId(challenge.data.id);
+    setMfaRequired(true);
+    toast.message("Enter your 2FA authenticator code");
+    return true;
+  };
+
+  const handleMfaVerify = async () => {
+    if (!mfaFactorId || !mfaChallengeId) {
+      toast.error("Two-factor challenge missing. Sign in again.");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(mfaCode)) {
+      toast.error("Enter a valid 6-digit authenticator code");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const verify = await supabase.auth.mfa.verify({
+        factorId: mfaFactorId,
+        challengeId: mfaChallengeId,
+        code: mfaCode,
+      } as any);
+      if (verify.error) throw verify.error;
+
+      const method = pendingMethod || "email_password";
+      const userId = pendingUserId || verify.data?.user?.id;
+
+      setMfaRequired(false);
+      setMfaCode("");
+      setMfaFactorId(null);
+      setMfaChallengeId(null);
+      setPendingMethod(null);
+      setPendingUserId(null);
+
+      await finalizeSignIn(method, userId || undefined);
+    } catch (err: any) {
+      toast.error(err.message || "Invalid authenticator code");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCodeSubmit = async () => {
+    if (codeSubmitInFlightRef.current) return;
+    codeSubmitInFlightRef.current = true;
     setLoading(true);
     try {
       if (!codeSent) {
@@ -61,23 +145,23 @@ export default function Login() {
 
       const data = await verifyEmailCode(email, code, "login");
       const method: "email_password" | "email_code" = "email_code";
+      setCode("");
+      setCodeSent(false);
 
-      logAuditEvent({ type: "login", user_id: data.user?.id, details: { method } });
-      await notifySecurityLogin(method);
-      toast.success("Welcome back!");
-
-      const hasOAuthParams = searchParams.has("client_id") && searchParams.has("redirect_uri");
-      if (hasOAuthParams) {
-        navigate(`/authorize?${searchParams.toString()}`);
+      const mfaStarted = await maybeStartMfa();
+      if (mfaStarted) {
+        setPendingMethod(method);
+        setPendingUserId(data.user?.id || data.session?.user?.id || null);
         return;
       }
 
-      navigate("/profile");
+      await finalizeSignIn(method, data.user?.id || data.session?.user?.id);
     } catch (err: any) {
       logAuditEvent({ type: "login_failed", details: { email, reason: err.message } });
       toast.error(err.message || "Invalid code");
     } finally {
       setLoading(false);
+      codeSubmitInFlightRef.current = false;
     }
   };
 
@@ -93,18 +177,14 @@ export default function Login() {
       const data = await signIn(email, password);
       const method: "email_password" = "email_password";
 
-      logAuditEvent({ type: "login", user_id: data.user?.id, details: { method } });
-      await notifySecurityLogin(method);
-      toast.success("Welcome back!");
-
-      // If there are SSO params, redirect to the authorize page to handle them properly
-      const hasOAuthParams = searchParams.has("client_id") && searchParams.has("redirect_uri");
-      if (hasOAuthParams) {
-        navigate(`/authorize?${searchParams.toString()}`);
+      const mfaStarted = await maybeStartMfa();
+      if (mfaStarted) {
+        setPendingMethod(method);
+        setPendingUserId(data.user?.id || data.session?.user?.id || null);
         return;
       }
 
-      navigate("/profile");
+      await finalizeSignIn(method, data.user?.id || data.session?.user?.id);
     } catch (err: any) {
       logAuditEvent({ type: "login_failed", details: { email, reason: err.message } });
       toast.error(err.message || "Invalid credentials");
@@ -224,11 +304,34 @@ export default function Login() {
               <p className="text-xs text-muted-foreground">Use the 6-digit code sent to your email.</p>
             </div>
           )}
+
+          {mfaRequired && (
+            <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/20 p-3">
+              <Label htmlFor="mfaCode">Authenticator code</Label>
+              <Input
+                id="mfaCode"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                placeholder="Enter 6-digit 2FA code"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="bg-secondary/50 border-border/60"
+              />
+              <p className="text-xs text-muted-foreground">Two-factor authentication is enabled for this account.</p>
+            </div>
+          )}
         </div>
 
-        <Button type="submit" className="w-full zuup-gradient" size="lg" disabled={loading}>
+        <Button
+          type={mfaRequired ? "button" : "submit"}
+          onClick={mfaRequired ? handleMfaVerify : undefined}
+          className="w-full zuup-gradient"
+          size="lg"
+          disabled={loading}
+        >
           {loading ? <Loader2 className="animate-spin" size={18} /> : <LogIn size={18} />}
-          Sign In
+          {mfaRequired ? "Verify 2FA" : "Sign In"}
         </Button>
 
         <p className="text-center text-sm text-muted-foreground">

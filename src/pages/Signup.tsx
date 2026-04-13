@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
@@ -22,6 +22,7 @@ export default function Signup() {
   const [sendingCode, setSendingCode] = useState(false);
   const [signupMode, setSignupMode] = useState<SignupMode>("password");
   const [codeSent, setCodeSent] = useState(false);
+  const codeSubmitInFlightRef = useRef(false);
   const { signUp, sendEmailCode, verifyEmailCode } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -55,6 +56,8 @@ export default function Signup() {
   }, [code, codeSent, loading, signupMode]);
 
   const handleCodeSignup = async () => {
+    if (codeSubmitInFlightRef.current) return;
+    codeSubmitInFlightRef.current = true;
     setLoading(true);
     try {
       if (!codeSent) {
@@ -64,6 +67,8 @@ export default function Signup() {
         throw new Error("Enter a valid 6-digit code");
       }
       await verifyEmailCode(email, code, "signup");
+      setCode("");
+      setCodeSent(false);
       await notifySecurityLogin("email_code");
       toast.success("Account created and signed in");
       navigate("/profile");
@@ -71,6 +76,7 @@ export default function Signup() {
       toast.error(err.message || "Signup failed");
     } finally {
       setLoading(false);
+      codeSubmitInFlightRef.current = false;
     }
   };
 
