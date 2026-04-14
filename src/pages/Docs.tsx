@@ -1,251 +1,255 @@
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
-  Shield, Key, Code2, ChevronRight, Copy, Check,
-  ArrowRight, Zap, Lock, Globe, Fingerprint,
-  AlertTriangle, Info, ExternalLink, Terminal,
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  ChevronRight,
+  Code2,
+  Copy,
+  ExternalLink,
+  Fingerprint,
+  Globe,
+  Info,
+  Key,
+  Lock,
+  Shield,
+  Terminal,
+  Zap,
 } from "lucide-react";
 
 const SECTIONS = [
   { id: "overview", label: "Overview" },
-  { id: "zuup-apps", label: "Zuup Apps" },
-  { id: "quickstart", label: "Quickstart" },
-  { id: "pkce", label: "PKCE Flow" },
+  { id: "quickstart", label: "Quick Start" },
+  { id: "register", label: "Register App" },
+  { id: "environment", label: "Environment" },
+  { id: "frontend", label: "Frontend Login" },
+  { id: "callback", label: "Callback + Exchange" },
+  { id: "session", label: "Session" },
   { id: "scopes", label: "Scopes" },
   { id: "endpoints", label: "Endpoints" },
-  { id: "profile-fields", label: "Profile Fields" },
-  { id: "register", label: "Register an App" },
-  { id: "examples", label: "Code Examples" },
-  { id: "errors", label: "Error Reference" },
+  { id: "mistakes", label: "Common Mistakes" },
+  { id: "repo-map", label: "Repo Map" },
 ];
 
-const FIRST_PARTY_APPS = [
-  "https://order.zuup.dev",
-  "https://time.zuup.dev",
-  "https://code.zuup.dev",
-  "https://watch.zuup.dev",
-  "https://zuup.dev",
-  "https://giza.zuup.dev",
-  "https://zuup.dev/schools",
+const APP_EXAMPLES = [
+  {
+    name: "Zuup Auth OAuth App",
+    clientId: "0d810775-7d53-4c4d-b44e-2a39f7fb1741",
+    firstParty: false,
+    redirects: [
+      "https://www.zuup.dev/callback",
+      "https://code.zuup.dev/callback",
+      "https://watch.zuup.dev/auth/zuup/callback",
+      "http://localhost:3000/callback",
+      "http://localhost:5173/callback",
+    ],
+  },
+  {
+    name: "ZuupCode",
+    clientId: "zuupcode",
+    firstParty: true,
+    redirects: [
+      "https://code.zuup.dev/callback",
+      "https://code.zuup.dev/auth/callback",
+      "https://watch.zuup.dev/auth/zuup/callback",
+      "http://localhost:3000/callback",
+      "http://localhost:5173/callback",
+    ],
+  },
+  {
+    name: "ZuupTime",
+    clientId: "zuuptime",
+    firstParty: true,
+    redirects: ["https://time.zuup.dev/callback", "https://time.zuup.dev/auth/callback", "http://localhost:3000/callback"],
+  },
+  {
+    name: "Zuup",
+    clientId: "zuupdev",
+    firstParty: true,
+    redirects: ["https://www.zuup.dev/callback", "https://zuup.dev/callback", "http://localhost:3000/callback"],
+  },
 ];
 
-const PROFILE_FIELDS = [
-  { key: "full_name", desc: "User first name / display first name" },
-  { key: "last_name", desc: "User last name" },
-  { key: "username", desc: "Public username" },
-  { key: "country", desc: "Mailing country" },
-  { key: "phone", desc: "Local phone number only" },
-  { key: "phone_country_code", desc: "Dial prefix selected by user" },
-  { key: "full_phone", desc: "Composed dial code + phone value" },
-  { key: "address_line1", desc: "Mailing address primary line" },
-  { key: "address_line2", desc: "Mailing address secondary line (optional)" },
-  { key: "city", desc: "City" },
-  { key: "state_region", desc: "State / province / region" },
-  { key: "postal_code", desc: "ZIP or postal code" },
-  { key: "mailing_address", desc: "Nested object mirror of address fields" },
-  { key: "avatar_url", desc: "Profile avatar image URL" },
-  { key: "cover_image_url", desc: "Profile cover image URL" },
-  { key: "gallery_images", desc: "Array of extra profile image URLs" },
-  { key: "security_alerts_enabled", desc: "Toggle for login/security alert emails" },
+const QUICK_STEPS = [
+  {
+    title: "Register the app",
+    body: (
+      <>
+        Register through the Zuup Auth signup flow. In this repo, the admin/profile flow lives in <span className="docs-inline">/profile</span>, and the app registration entrypoint is
+        available from <Link to="/signup">the signup route</Link>.
+      </>
+    ),
+  },
+  {
+    title: "Configure redirects",
+    body: (
+      <>
+        Use an actual callback page such as <span className="docs-inline">/callback</span> or <span className="docs-inline">/auth/zuup/callback</span>. Do not point the redirect URI at an
+        API route.
+      </>
+    ),
+  },
+  {
+    title: "Set env vars",
+    body: (
+      <>
+        Keep browser-facing values prefixed with <span className="docs-inline">VITE_</span>. Keep <span className="docs-inline">client_secret</span> and service keys only on the server.
+      </>
+    ),
+  },
+  {
+    title: "Start login in the browser",
+    body: (
+      <>
+        Generate a PKCE verifier/challenge before redirecting the user to <span className="docs-inline">https://auth.zuup.dev/authorize</span>.
+      </>
+    ),
+  },
+  {
+    title: "Handle the callback",
+    body: (
+      <>
+        Validate <span className="docs-inline">state</span>, confirm the stored PKCE verifier, then send the authorization code to your backend.
+      </>
+    ),
+  },
+  {
+    title: "Exchange and hydrate",
+    body: (
+      <>
+        Exchange the code on the server, fetch <span className="docs-inline">userinfo</span>, and hydrate your app session. In this repo, session persistence is managed by
+        Supabase auth in <span className="docs-inline">src/lib/supabase.ts</span>.
+      </>
+    ),
+  },
+];
+
+const CLIENT_VARS = [
+  "VITE_ZUUP_CLIENT_ID",
+  "VITE_ZUUP_REDIRECT_URI",
+  "VITE_ZUUP_AUTH_URL or VITE_ZUUP_AUTHORIZE_URL",
+  "VITE_ZUUP_SCOPE",
+  "VITE_ZUUP_TOKEN_URL or VITE_ZUUP_TOKEN_EXCHANGE_URL when you override the default exchange path",
+];
+
+const SERVER_VARS = [
+  "ZUUP_CLIENT_ID",
+  "ZUUP_CLIENT_SECRET",
+  "ZUUP_REDIRECT_URI",
+  "ZUUP_TOKEN_URL or ZUUP_OAUTH_TOKEN_URL",
+  "ZUUP_USERINFO_URL",
+  "ZUUP_OAUTH_SIGNING_SECRET",
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
 ];
 
 const SCOPES = [
-  { scope: "openid", desc: "Required for OIDC. Returns an id_token with user identity.", required: true },
-  { scope: "profile", desc: "Access to full_name, username, and avatar_url.", required: false },
-  { scope: "email", desc: "Read the user's email address.", required: false },
-  { scope: "offline_access", desc: "Issue a refresh_token for long-lived access.", required: false },
-  { scope: "zuup:read", desc: "Read Zuup user data and settings.", required: false },
-  { scope: "zuup:write", desc: "Create and update Zuup user data.", required: false },
-  { scope: "zuup:admin", desc: "Full admin access. Requires explicit approval.", required: false },
+  { scope: "openid", required: true, desc: "Required for OIDC and identity claims." },
+  { scope: "profile", required: false, desc: "Reads the user's display name, username, and avatar." },
+  { scope: "email", required: false, desc: "Reads the user's email address." },
+  { scope: "offline_access", required: false, desc: "Requests a refresh token for longer-lived access." },
+  { scope: "zuup:read", required: false, desc: "Read-only access to Zuup account data and settings." },
+  { scope: "zuup:write", required: false, desc: "Create and update Zuup account data." },
+  { scope: "zuup:admin", required: false, desc: "Full administrative access. Request only with explicit approval." },
 ];
 
 const ENDPOINTS = [
-  { method: "GET", path: "https://auth.zuup.dev/authorize", desc: "Initiate authorization. Redirects to login/consent." },
-  { method: "POST", path: "https://auth.zuup.dev/api/oauth/token", desc: "Exchange authorization code for access + refresh tokens." },
-  { method: "GET", path: "https://auth.zuup.dev/api/oauth/userinfo", desc: "Fetch the authenticated user's profile (Bearer token)." },
-  { method: "POST", path: "https://auth.zuup.dev/api/oauth/validate-request", desc: "Validate OAuth request payload before consent." },
-  { method: "POST", path: "https://auth.zuup.dev/api/oauth/register-client", desc: "Register an OAuth client from dashboard/dev tab." },
-  { method: "GET", path: "https://qnapwukqhybziduhzpow.supabase.co/auth/v1/.well-known/openid-configuration", desc: "OIDC discovery document." },
-  { method: "GET", path: "https://qnapwukqhybziduhzpow.supabase.co/auth/v1/.well-known/jwks.json", desc: "JSON Web Key Set for token verification." },
+  { method: "GET", path: "https://auth.zuup.dev/authorize", desc: "Starts the hosted login and consent flow." },
+  { method: "POST", path: "https://auth.zuup.dev/api/oauth/validate-request", desc: "Validates client_id, redirect_uri, scopes, and PKCE fields before login." },
+  { method: "POST", path: "https://auth.zuup.dev/api/oauth/token", desc: "Exchanges the authorization code for tokens." },
+  { method: "GET", path: "https://auth.zuup.dev/api/oauth/userinfo", desc: "Returns the authenticated profile from the bearer token." },
+  { method: "POST", path: "https://auth.zuup.dev/api/oauth/register-client", desc: "Registers an OAuth client from the admin/profile flow." },
 ];
 
-const ERRORS = [
-  { code: "invalid_request", desc: "Missing or malformed parameters.", fix: "Check client_id, redirect_uri, and response_type." },
-  { code: "invalid_client", desc: "Unknown or unauthorized client.", fix: "Verify your client_id is registered." },
-  { code: "invalid_grant", desc: "Auth code expired, used, or PKCE mismatch.", fix: "Codes expire in 10 min and are single-use." },
-  { code: "access_denied", desc: "User denied the consent request.", fix: "Handle gracefully — show your app's fallback." },
-  { code: "unsupported_grant_type", desc: "Only authorization_code is supported.", fix: "Use the correct grant_type in your token request." },
-  { code: "invalid_scope", desc: "Scope not registered for this client.", fix: "Request only scopes listed in your app's config." },
+const REPO_MAP = [
+  { file: "src/lib/oauth.ts", desc: "PKCE helpers, client validation, scope rules, code generation, and audit logging." },
+  { file: "src/pages/Authorize.tsx", desc: "Interactive login and consent UI that validates the request before auth." },
+  { file: "src/pages/Token.tsx", desc: "A local token-exchange demo page that renders the API response." },
+  { file: "src/lib/supabase.ts", desc: "Supabase auth client config, session persistence, and OAuth endpoint constants." },
+  { file: "src/hooks/useAuth.ts", desc: "Loads the current session, listens for auth changes, and refreshes on visibility changes." },
+  { file: "api/oauth/token.js", desc: "Server-side token exchange, PKCE verification, JWT minting, and profile lookup." },
+  { file: "api/oauth/userinfo.js", desc: "Bearer-token userinfo endpoint backed by JWT verification." },
+  { file: "api/oauth/validate-request.js", desc: "Request preflight validation before rendering consent." },
 ];
 
-const EXAMPLES: Record<string, { lang: string; code: string }> = {
-  "JavaScript (Vanilla)": {
-    lang: "javascript",
-    code: `// 1. Generate PKCE
-async function generatePKCE() {
-  const verifier = btoa(
-    String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))
-  ).replace(/[+/=]/g, c => ({'+':'-','/':'_','=':''})[c]);
+const COMMON_MISTAKES = [
+  "Using an API route as the redirect URI instead of a real callback page.",
+  "Putting the client secret in a browser-visible env var.",
+  "Forgetting to store the PKCE verifier before redirecting the user.",
+  "Mismatching the callback URL between Zuup and your app.",
+  "Requesting scopes that were not registered for the client.",
+];
 
-  const hash = await crypto.subtle.digest(
-    'SHA-256', new TextEncoder().encode(verifier)
-  );
-  const challenge = btoa(
-    String.fromCharCode(...new Uint8Array(hash))
-  ).replace(/[+/=]/g, c => ({'+':'-','/':'_','=':''})[c]);
+const EXAMPLES = {
+  browser: {
+    label: "Browser PKCE",
+    lang: "typescript",
+    code: `import { generateCodeChallenge, generateCodeVerifier } from "@/lib/oauth";
 
-  return { verifier, challenge };
-}
-
-// 2. Redirect to Zuup
-async function loginWithZuup() {
-  const { verifier, challenge } = await generatePKCE();
+export async function loginWithZuup() {
+  const verifier = await generateCodeVerifier();
+  const challenge = await generateCodeChallenge(verifier);
   const state = crypto.randomUUID();
-  
-  sessionStorage.setItem('pkce_verifier', verifier);
-  sessionStorage.setItem('oauth_state', state);
+
+  sessionStorage.setItem("zuup_pkce_verifier", verifier);
+  sessionStorage.setItem("zuup_oauth_state", state);
 
   const params = new URLSearchParams({
-    client_id: 'YOUR_CLIENT_ID',
-    redirect_uri: window.location.origin + '/callback',
-    response_type: 'code',
-    scope: 'openid profile email',
+    client_id: "YOUR_CLIENT_ID",
+    redirect_uri: window.location.origin + "/callback",
+    response_type: "code",
+    scope: "openid profile email offline_access",
     state,
     code_challenge: challenge,
-    code_challenge_method: 'S256',
+    code_challenge_method: "S256",
   });
 
-  window.location.href = \`https://auth.zuup.dev/authorize?\${params}\`;
-}
-
-// 3. Handle callback
-async function handleCallback() {
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get('code');
-  const state = params.get('state');
-
-  if (state !== sessionStorage.getItem('oauth_state')) {
-    throw new Error('State mismatch — possible CSRF attack');
-  }
-
-  // Exchange code (do this server-side in production!)
-  const res = await fetch('https://auth.zuup.dev/api/oauth/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: 'YOUR_CLIENT_ID',
-      client_secret: 'YOUR_CLIENT_SECRET', // server-side only!
-      code,
-      redirect_uri: window.location.origin + '/callback',
-      code_verifier: sessionStorage.getItem('pkce_verifier'),
-    }),
-  });
-
-  const { access_token, refresh_token } = await res.json();
-
-  const userRes = await fetch('https://auth.zuup.dev/api/oauth/userinfo', {
-    headers: { Authorization: 'Bearer ' + access_token },
-  });
-  const user = await userRes.json();
-
-  console.log('Logged in as:', user?.email);
-  return { access_token, refresh_token };
+  window.location.assign(
+    \`https://auth.zuup.dev/authorize?\${params}\`
+  );
 }`,
   },
-  "React + Supabase": {
+  server: {
+    label: "Server exchange",
     lang: "typescript",
-    code: `import { createClient } from '@supabase/supabase-js';
+    code: `const response = await fetch("/api/oauth/token", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: window.location.origin + "/callback",
+    client_id: process.env.ZUUP_CLIENT_ID,
+    code_verifier,
+  }),
+});
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const payload = await response.json();
 
-// In your component
-function LoginButton() {
-  const login = async () => {
-    const verifier = generateVerifier(); // see JS example
-    const challenge = await generateChallenge(verifier);
-    
-    sessionStorage.setItem('pkce_verifier', verifier);
-    
-    const params = new URLSearchParams({
-      client_id: 'YOUR_CLIENT_ID',
-      redirect_uri: window.location.origin + '/callback',
-      response_type: 'code',
-      scope: 'openid profile email',
-      state: crypto.randomUUID(),
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-    });
-    
-    window.location.href = \`https://auth.zuup.dev/authorize?\${params}\`;
-  };
+const profileResponse = await fetch("/api/oauth/userinfo", {
+  headers: { Authorization: \`Bearer \${payload.access_token}\` },
+});
 
-  return <button onClick={login}>Login with Zuup</button>;
-}
-
-// In your /callback route
-async function handleCallback(code: string) {
-  // Your backend exchanges the code with Zuup Auth
-  const { access_token, refresh_token } = await exchangeCode(code);
-
-  const profileRes = await fetch('https://auth.zuup.dev/api/oauth/userinfo', {
-    headers: { Authorization: 'Bearer ' + access_token },
-  });
-  const user = await profileRes.json();
-
-  console.log('Logged in as:', user?.email);
-}`,
+const profile = await profileResponse.json();`,
   },
-  "Next.js (App Router)": {
-    lang: "typescript",
-    code: `// app/api/auth/callback/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const code = searchParams.get('code');
-  const state = searchParams.get('state');
-  
-  // Verify state from cookie
-  const storedState = req.cookies.get('oauth_state')?.value;
-  if (state !== storedState) {
-    return NextResponse.json({ error: 'invalid_state' }, { status: 400 });
-  }
-  
-  const verifier = req.cookies.get('pkce_verifier')?.value;
-  
-  // Exchange code for tokens (this IS server-side — safe!)
-  const tokenRes = await fetch('https://auth.zuup.dev/api/oauth/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: process.env.ZUUP_CLIENT_ID!,
-      client_secret: process.env.ZUUP_CLIENT_SECRET!, // safe on server
-      code: code!,
-      redirect_uri: \`\${process.env.APP_URL}/api/auth/callback\`,
-      code_verifier: verifier!,
-    }),
-  });
-  
-  const { access_token, refresh_token } = await tokenRes.json();
-  
-  // Store in httpOnly cookies
-  const response = NextResponse.redirect(new URL('/dashboard', req.url));
-  response.cookies.set('access_token', access_token, { httpOnly: true, secure: true });
-  response.cookies.set('refresh_token', refresh_token, { httpOnly: true, secure: true });
-  return response;
-}`,
-  },
-};
+} as const;
 
 function CodeBlock({ code, lang }: { code: string; lang: string }) {
   const [copied, setCopied] = useState(false);
+
   return (
     <div className="docs-code-wrap">
       <div className="docs-code-bar">
         <span className="docs-code-lang">{lang}</span>
-        <button className="docs-copy-btn" onClick={() => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1800); }}>
+        <button
+          className="docs-copy-btn"
+          onClick={() => {
+            void navigator.clipboard.writeText(code);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1600);
+          }}
+        >
           {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
         </button>
       </div>
@@ -254,23 +258,78 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
   );
 }
 
-function Alert({ type, children }: { type: "warning" | "info"; children: React.ReactNode }) {
-  const styles = {
-    warning: { bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.2)", color: "#f59e0b", Icon: AlertTriangle },
-    info: { bg: "rgba(59,130,246,0.08)", border: "rgba(59,130,246,0.2)", color: "#60a5fa", Icon: Info },
-  };
-  const s = styles[type];
+function Alert({ type, children }: { type: "warning" | "info"; children: ReactNode }) {
+  const config =
+    type === "warning"
+      ? { icon: AlertTriangle, border: "rgba(245, 158, 11, 0.24)", bg: "rgba(245, 158, 11, 0.08)", color: "#fbbf24" }
+      : { icon: Info, border: "rgba(96, 165, 250, 0.24)", bg: "rgba(96, 165, 250, 0.08)", color: "#93c5fd" };
+
+  const Icon = config.icon;
+
   return (
-    <div className="docs-alert" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
-      <s.Icon size={15} style={{ color: s.color, flexShrink: 0, marginTop: 2 }} />
-      <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>{children}</div>
+    <div className="docs-alert" style={{ borderColor: config.border, background: config.bg }}>
+      <Icon size={16} style={{ color: config.color, flexShrink: 0, marginTop: 1 }} />
+      <div>{children}</div>
     </div>
   );
 }
 
+function Section({
+  id,
+  eyebrow,
+  title,
+  lead,
+  delay,
+  children,
+}: {
+  id: string;
+  eyebrow: string;
+  title: string;
+  lead?: ReactNode;
+  delay: number;
+  children: ReactNode;
+}) {
+  return (
+    <section id={id} className="docs-section" style={{ animationDelay: `${delay}ms` }}>
+      <div className="docs-section-eyebrow">{eyebrow}</div>
+      <h2 className="docs-section-title">{title}</h2>
+      {lead ? <p className="docs-section-lead">{lead}</p> : null}
+      {children}
+    </section>
+  );
+}
+
+function InlineCode({ children }: { children: ReactNode }) {
+  return <span className="docs-inline">{children}</span>;
+}
+
 export default function Docs() {
   const [activeSection, setActiveSection] = useState("overview");
-  const [activeExample, setActiveExample] = useState("JavaScript (Vanilla)");
+  const [activeExample, setActiveExample] = useState<keyof typeof EXAMPLES>("browser");
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+        if (visible?.target instanceof HTMLElement) {
+          setActiveSection(visible.target.id);
+        }
+      },
+      { rootMargin: "-22% 0px -58% 0px", threshold: [0.2, 0.35, 0.5, 0.75] },
+    );
+
+    for (const section of SECTIONS) {
+      const element = document.getElementById(section.id);
+      if (element) observer.observe(element);
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   const scrollTo = (id: string) => {
     setActiveSection(id);
@@ -278,475 +337,1230 @@ export default function Docs() {
   };
 
   return (
-    <div className="docs-root">
+    <div className="docs-shell">
       <style>{`
-        .docs-root {
+        .docs-shell {
           min-height: 100vh;
-          background: #0d0f14;
-          color: #e8eaf0;
-          font-family: 'Inter', system-ui, sans-serif;
+          position: relative;
+          overflow: hidden;
+          color: #e8eef9;
+          background:
+            radial-gradient(circle at top left, rgba(232, 66, 90, 0.16), transparent 28%),
+            radial-gradient(circle at bottom right, rgba(96, 165, 250, 0.12), transparent 32%),
+            linear-gradient(180deg, #080a0f 0%, #0c1018 48%, #090c12 100%);
+        }
+
+        .docs-shell::before {
+          content: "";
+          position: fixed;
+          inset: 0;
+          pointer-events: none;
+          background-image: linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+          background-size: 56px 56px;
+          mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85), transparent 90%);
+          opacity: 0.3;
+        }
+
+        .docs-orb {
+          position: fixed;
+          border-radius: 9999px;
+          filter: blur(90px);
+          pointer-events: none;
+          opacity: 0.18;
+          animation: docsFloat 16s ease-in-out infinite;
+        }
+
+        .docs-orb-a {
+          top: -10rem;
+          right: -12rem;
+          width: 30rem;
+          height: 30rem;
+          background: hsl(var(--zuup-coral) / 0.8);
+        }
+
+        .docs-orb-b {
+          bottom: -12rem;
+          left: -10rem;
+          width: 28rem;
+          height: 28rem;
+          background: rgba(96, 165, 250, 0.9);
+          animation-duration: 20s;
+          animation-delay: -6s;
+        }
+
+        .docs-topbar {
+          position: sticky;
+          top: 0;
+          z-index: 30;
+          backdrop-filter: blur(18px);
+          background: rgba(8, 10, 15, 0.72);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .docs-topbar-inner {
+          max-width: 1440px;
+          margin: 0 auto;
+          min-height: 72px;
+          padding: 0 24px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+        }
+
+        .docs-brand {
+          display: inline-flex;
+          align-items: center;
+          gap: 12px;
+          text-decoration: none;
+          color: inherit;
+        }
+
+        .docs-brand img {
+          width: 30px;
+          height: 30px;
+          border-radius: 999px;
+          box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+        }
+
+        .docs-brand-mark {
           display: flex;
           flex-direction: column;
-        }
-        .docs-nav {
-          position: sticky; top: 0; z-index: 50;
-          border-bottom: 1px solid rgba(255,255,255,0.06);
-          background: rgba(13,15,20,0.9);
-          backdrop-filter: blur(16px);
-        }
-        .docs-nav-inner {
-          max-width: 1200px; margin: 0 auto;
-          padding: 0 2rem; height: 58px;
-          display: flex; align-items: center; justify-content: space-between;
-        }
-        .docs-logo { display: flex; align-items: center; gap: 8px; text-decoration: none; }
-        .docs-logo img { height: 28px; width: auto; }
-        .docs-logo-t { font-size: 16px; font-weight: 700; color: #e8eaf0; }
-        .docs-logo-a { font-size: 16px; font-weight: 300; color: #e8425a; }
-        .docs-nav-right { display: flex; align-items: center; gap: 16px; }
-        .docs-nav-right a { font-size: 13px; color: #6b7280; text-decoration: none; transition: color .15s; }
-        .docs-nav-right a:hover { color: #e8eaf0; }
-        .docs-btn {
-          padding: 7px 16px; border-radius: 8px;
-          font-size: 13px; font-weight: 600; color: #fff;
-          background: linear-gradient(135deg, #e8425a, #f06080);
-          border: none; cursor: pointer; text-decoration: none;
-          display: inline-flex; align-items: center; gap: 6px;
+          line-height: 1;
         }
 
-        .docs-body { display: flex; flex: 1; max-width: 1200px; margin: 0 auto; width: 100%; }
+        .docs-brand-name {
+          font-size: 15px;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+        }
 
-        /* sidebar */
-        .docs-sidebar {
-          width: 220px; shrink: 0; flex-shrink: 0;
-          position: sticky; top: 58px; height: calc(100vh - 58px);
-          overflow-y: auto; padding: 28px 0;
-          border-right: 1px solid rgba(255,255,255,0.06);
+        .docs-brand-sub {
+          margin-top: 4px;
+          font-size: 12px;
+          color: #8b94a7;
         }
-        .docs-sidebar-label {
-          font-size: 11px; font-weight: 600; text-transform: uppercase;
-          letter-spacing: .08em; color: #4b5563;
-          padding: 0 20px; margin-bottom: 8px;
-        }
-        .docs-sidebar-link {
-          display: block; padding: 7px 20px;
-          font-size: 13px; color: #6b7280;
-          text-decoration: none; cursor: pointer;
-          transition: all .12s; border-left: 2px solid transparent;
-        }
-        .docs-sidebar-link:hover { color: #e8eaf0; background: rgba(255,255,255,0.03); }
-        .docs-sidebar-link.active { color: #e8425a; border-left-color: #e8425a; background: rgba(232,66,90,0.06); }
 
-        /* content */
-        .docs-content { flex: 1; padding: 40px 48px; min-width: 0; }
+        .docs-topbar-links {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          flex-wrap: wrap;
+        }
 
-        .docs-section { margin-bottom: 64px; scroll-margin-top: 80px; }
-        .docs-section-tag {
-          font-size: 11px; font-weight: 600; text-transform: uppercase;
-          letter-spacing: .1em; color: #e8425a; margin-bottom: 8px;
+        .docs-topbar-links a {
+          color: #aab3c4;
+          text-decoration: none;
+          font-size: 13px;
+          transition: color 140ms ease, transform 140ms ease;
         }
-        .docs-h2 {
-          font-size: 28px; font-weight: 800; color: #f1f3f8;
-          letter-spacing: -.02em; margin: 0 0 10px; line-height: 1.2;
-        }
-        .docs-lead { font-size: 15px; color: #6b7280; line-height: 1.7; margin-bottom: 24px; }
-        .docs-p { font-size: 14px; color: #9ca3af; line-height: 1.8; margin-bottom: 16px; }
-        .docs-h3 { font-size: 17px; font-weight: 600; color: #e8eaf0; margin: 28px 0 10px; }
 
-        /* code */
-        .docs-code-wrap {
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 12px; overflow: hidden;
-          background: #111318; margin: 16px 0;
+        .docs-topbar-links a:hover {
+          color: #fff;
+          transform: translateY(-1px);
         }
-        .docs-code-bar {
-          display: flex; align-items: center; justify-content: space-between;
+
+        .docs-button {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
           padding: 10px 16px;
-          background: #161a22; border-bottom: 1px solid rgba(255,255,255,0.06);
-        }
-        .docs-code-lang { font-size: 12px; color: #6b7280; font-family: 'SF Mono', monospace; }
-        .docs-copy-btn {
-          display: flex; align-items: center; gap: 5px;
-          padding: 4px 10px; border-radius: 6px;
-          border: 1px solid rgba(255,255,255,0.1);
-          background: rgba(255,255,255,0.04); color: #9ca3af;
-          font-size: 12px; cursor: pointer; font-family: inherit;
-          transition: all .15s;
-        }
-        .docs-copy-btn:hover { background: rgba(255,255,255,0.09); color: #e8eaf0; }
-        .docs-code-body {
-          padding: 20px; font-size: 12.5px; line-height: 1.7;
-          color: #9ca3af; font-family: 'SF Mono', 'Fira Code', monospace;
-          overflow-x: auto; margin: 0;
-          white-space: pre;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: #fff;
+          text-decoration: none;
+          font-size: 13px;
+          font-weight: 700;
+          background: linear-gradient(135deg, hsl(var(--zuup-coral)), hsl(var(--zuup-glow)));
+          box-shadow: 0 12px 32px -18px rgba(232, 66, 90, 0.75);
+          transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
         }
 
-        /* alert */
-        .docs-alert {
-          display: flex; gap: 10px; padding: 14px 16px;
-          border-radius: 10px; margin: 16px 0;
+        .docs-button:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 18px 44px -22px rgba(232, 66, 90, 0.85);
+          filter: saturate(1.04);
         }
 
-        /* inline code */
-        .ic {
-          font-family: 'SF Mono', monospace; font-size: 12px;
-          background: rgba(255,255,255,0.08); color: #e8425a;
-          padding: 1px 6px; border-radius: 4px;
+        .docs-layout {
+          max-width: 1440px;
+          margin: 0 auto;
+          display: grid;
+          grid-template-columns: 290px minmax(0, 1fr);
+          gap: 0;
         }
 
-        /* table */
-        .docs-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
-        .docs-table th { text-align: left; padding: 10px 12px; color: #6b7280; font-weight: 500; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .docs-table td { padding: 10px 12px; color: #9ca3af; border-bottom: 1px solid rgba(255,255,255,0.05); vertical-align: top; }
-        .docs-table td:first-child { font-family: 'SF Mono', monospace; color: #e8425a; font-size: 12px; white-space: nowrap; }
-        .docs-table tr:last-child td { border-bottom: none; }
-
-        /* endpoint table */
-        .docs-ep-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
-        .docs-ep-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); color: #9ca3af; }
-        .docs-ep-table td:first-child { width: 60px; }
-        .docs-ep-table tr:last-child td { border-bottom: none; }
-        .method-badge {
-          display: inline-block; padding: 2px 8px; border-radius: 4px;
-          font-size: 11px; font-weight: 700; font-family: monospace;
+        .docs-sidebar {
+          position: sticky;
+          top: 72px;
+          height: calc(100vh - 72px);
+          overflow: auto;
+          padding: 28px 16px 28px 20px;
+          border-right: 1px solid rgba(255, 255, 255, 0.06);
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 22%);
         }
-        .method-get { background: rgba(16,185,129,0.12); color: #10b981; }
-        .method-post { background: rgba(59,130,246,0.12); color: #60a5fa; }
 
-        /* scope pills */
-        .scope-req { background: rgba(232,66,90,0.1); color: #e8425a; border: 1px solid rgba(232,66,90,0.2); font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+        .docs-sidebar-label {
+          margin: 0 0 10px;
+          color: #73819a;
+          font-size: 11px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.16em;
+        }
 
-        /* example tabs */
-        .docs-tabs { display: flex; gap: 4px; margin-bottom: 0; flex-wrap: wrap; }
-        .docs-tab {
-          padding: 7px 14px; border-radius: 8px 8px 0 0;
-          font-size: 13px; color: #6b7280; cursor: pointer;
-          background: transparent; border: none; font-family: inherit;
-          transition: all .12s;
+        .docs-sidebar-link {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          width: 100%;
+          padding: 10px 12px;
+          margin-bottom: 4px;
+          border-radius: 12px;
           border: 1px solid transparent;
+          color: #a7b2c7;
+          text-decoration: none;
+          cursor: pointer;
+          background: transparent;
+          transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+        }
+
+        .docs-sidebar-link:hover {
+          color: #fff;
+          background: rgba(255, 255, 255, 0.035);
+        }
+
+        .docs-sidebar-link.active {
+          color: #fff;
+          background: rgba(232, 66, 90, 0.1);
+          border-color: rgba(232, 66, 90, 0.22);
+          transform: translateX(2px);
+        }
+
+        .docs-sidebar-divider {
+          margin: 16px 0;
+          height: 1px;
+          background: rgba(255, 255, 255, 0.06);
+        }
+
+        .docs-main {
+          padding: 28px 28px 90px;
+          min-width: 0;
+        }
+
+        .docs-section {
+          margin-top: 36px;
+          scroll-margin-top: 100px;
+          animation: docsRise 0.65s ease both;
+        }
+
+        .docs-hero {
+          display: grid;
+          grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.85fr);
+          gap: 18px;
+        }
+
+        .docs-panel {
+          position: relative;
+          padding: 26px;
+          border-radius: 28px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025));
+          backdrop-filter: blur(18px);
+          box-shadow: 0 24px 80px -42px rgba(0, 0, 0, 0.9);
+        }
+
+        .docs-panel::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          padding: 1px;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 34%, transparent 70%, rgba(255, 255, 255, 0.08));
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask-composite: exclude;
+          pointer-events: none;
+          opacity: 0.55;
+        }
+
+        .docs-hero-kicker {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          border-radius: 999px;
+          color: #ffd1d8;
+          background: rgba(232, 66, 90, 0.12);
+          border: 1px solid rgba(232, 66, 90, 0.22);
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          margin-bottom: 18px;
+        }
+
+        .docs-hero-title {
+          margin: 0;
+          font-size: clamp(2.6rem, 4.2vw, 4.7rem);
+          line-height: 0.95;
+          letter-spacing: -0.06em;
+          max-width: 12ch;
+        }
+
+        .docs-hero-title span {
+          background: linear-gradient(135deg, #fff 0%, #ffd6de 34%, #f48aa0 70%, #f1bac5 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+        }
+
+        .docs-hero-lead {
+          margin: 18px 0 0;
+          max-width: 68ch;
+          color: #aab3c4;
+          font-size: 15px;
+          line-height: 1.8;
+        }
+
+        .docs-chip-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin: 22px 0 28px;
+        }
+
+        .docs-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.04);
+          color: #dfe7f5;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .docs-chip-accent {
+          color: #ffd1d8;
+          background: rgba(232, 66, 90, 0.12);
+          border-color: rgba(232, 66, 90, 0.18);
+        }
+
+        .docs-hero-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          margin-top: 24px;
+        }
+
+        .docs-secondary-button {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 16px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: #dfe7f5;
+          text-decoration: none;
+          font-size: 13px;
+          font-weight: 700;
+          background: rgba(255, 255, 255, 0.03);
+          transition: background 160ms ease, transform 160ms ease, border-color 160ms ease;
+        }
+
+        .docs-secondary-button:hover {
+          background: rgba(255, 255, 255, 0.07);
+          border-color: rgba(255, 255, 255, 0.16);
+          transform: translateY(-1px);
+        }
+
+        .docs-stat-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .docs-stat-card {
+          padding: 16px;
+          border-radius: 20px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(10, 14, 22, 0.5);
+        }
+
+        .docs-stat-top {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 10px;
+          color: #fff;
+          font-weight: 800;
+          font-size: 13px;
+        }
+
+        .docs-stat-desc {
+          margin: 0;
+          color: #aab3c4;
+          font-size: 12px;
+          line-height: 1.65;
+        }
+
+        .docs-panel-stack {
+          display: grid;
+          gap: 14px;
+        }
+
+        .docs-mini-card {
+          padding: 16px;
+          border-radius: 20px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.03);
+        }
+
+        .docs-mini-card-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: 0 0 8px;
+          font-size: 13px;
+          font-weight: 800;
+          color: #fff;
+        }
+
+        .docs-mini-card p {
+          margin: 0;
+          color: #aab3c4;
+          font-size: 12px;
+          line-height: 1.7;
+        }
+
+        .docs-section-eyebrow {
+          margin-bottom: 10px;
+          color: #f48aa0;
+          font-size: 11px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.16em;
+        }
+
+        .docs-section-title {
+          margin: 0;
+          font-size: clamp(1.55rem, 2.5vw, 2.2rem);
+          letter-spacing: -0.04em;
+          line-height: 1.08;
+          color: #fff;
+        }
+
+        .docs-section-lead {
+          margin: 12px 0 0;
+          max-width: 82ch;
+          color: #aab3c4;
+          font-size: 14px;
+          line-height: 1.8;
+        }
+
+        .docs-grid-2 {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+          margin-top: 18px;
+        }
+
+        .docs-grid-4 {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 14px;
+          margin-top: 18px;
+        }
+
+        .docs-step-card,
+        .docs-file-card,
+        .docs-env-card,
+        .docs-mistake-card,
+        .docs-app-card {
+          padding: 18px;
+          border-radius: 22px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.03);
+          box-shadow: 0 24px 72px -54px rgba(0, 0, 0, 0.9);
+          transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+        }
+
+        .docs-step-card:hover,
+        .docs-file-card:hover,
+        .docs-env-card:hover,
+        .docs-mistake-card:hover,
+        .docs-app-card:hover {
+          transform: translateY(-2px);
+          border-color: rgba(232, 66, 90, 0.18);
+          background: rgba(255, 255, 255, 0.05);
+        }
+
+        .docs-step-index {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          border-radius: 999px;
+          margin-bottom: 14px;
+          color: #fff;
+          font-weight: 800;
+          font-size: 13px;
+          background: linear-gradient(135deg, hsl(var(--zuup-coral) / 0.9), hsl(var(--zuup-glow) / 0.9));
+          box-shadow: 0 10px 22px -14px rgba(232, 66, 90, 0.85);
+        }
+
+        .docs-card-title {
+          margin: 0 0 8px;
+          color: #fff;
+          font-size: 14px;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+        }
+
+        .docs-card-body {
+          margin: 0;
+          color: #aab3c4;
+          font-size: 13px;
+          line-height: 1.7;
+        }
+
+        .docs-inline {
+          display: inline-flex;
+          align-items: center;
+          padding: 1px 7px;
+          border-radius: 999px;
+          border: 1px solid rgba(232, 66, 90, 0.2);
+          background: rgba(232, 66, 90, 0.08);
+          color: #ffd1d8;
+          font-family: ui-monospace, SFMono-Regular, SF Mono, Consolas, monospace;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+
+        .docs-alert {
+          display: flex;
+          gap: 10px;
+          align-items: flex-start;
+          margin-top: 18px;
+          padding: 14px 16px;
+          border-radius: 18px;
+          border: 1px solid;
+        }
+
+        .docs-alert div {
+          color: #aab3c4;
+          font-size: 13px;
+          line-height: 1.75;
+        }
+
+        .docs-table-wrap {
+          margin-top: 18px;
+          overflow-x: auto;
+          border-radius: 22px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.03);
+        }
+
+        .docs-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+        }
+
+        .docs-table th,
+        .docs-table td {
+          padding: 14px 16px;
+          text-align: left;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          vertical-align: top;
+        }
+
+        .docs-table th {
+          color: #7f8ca2;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
+        }
+
+        .docs-table td {
+          color: #bfd0e3;
+        }
+
+        .docs-table tr:last-child td {
           border-bottom: none;
         }
-        .docs-tab:hover { color: #e8eaf0; }
-        .docs-tab.active { color: #e8eaf0; background: #111318; border-color: rgba(255,255,255,0.08); }
 
-        /* register card */
-        .docs-register-steps { display: grid; gap: 16px; }
-        .docs-register-step {
-          display: flex; gap: 16px;
-          padding: 18px; border-radius: 12px;
-          border: 1px solid rgba(255,255,255,0.07);
-          background: #111318;
+        .docs-method {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 64px;
+          padding: 4px 8px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
         }
-        .docs-step-num {
-          width: 32px; height: 32px; border-radius: 50%;
-          background: rgba(232,66,90,0.1); border: 1px solid rgba(232,66,90,0.2);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 14px; font-weight: 700; color: #e8425a; flex-shrink: 0;
-        }
-        .docs-step-title { font-size: 14px; font-weight: 600; color: #e8eaf0; margin-bottom: 4px; }
-        .docs-step-body { font-size: 13px; color: #6b7280; line-height: 1.6; }
 
-        @media (max-width: 768px) {
-          .docs-sidebar { display: none; }
-          .docs-content { padding: 24px 20px; }
+        .docs-method-get {
+          color: #7cf0b8;
+          background: rgba(16, 185, 129, 0.12);
+        }
+
+        .docs-method-post {
+          color: #93c5fd;
+          background: rgba(59, 130, 246, 0.14);
+        }
+
+        .docs-tabs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 18px;
+        }
+
+        .docs-tab {
+          padding: 10px 14px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #aab3c4;
+          background: rgba(255, 255, 255, 0.03);
+          cursor: pointer;
+          transition: background 140ms ease, transform 140ms ease, border-color 140ms ease, color 140ms ease;
+        }
+
+        .docs-tab:hover {
+          color: #fff;
+          transform: translateY(-1px);
+        }
+
+        .docs-tab.active {
+          color: #fff;
+          background: rgba(232, 66, 90, 0.12);
+          border-color: rgba(232, 66, 90, 0.25);
+        }
+
+        .docs-grid-4 .docs-app-card {
+          min-height: 100%;
+        }
+
+        .docs-app-title {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .docs-app-title h4 {
+          margin: 0;
+          color: #fff;
+          font-size: 14px;
+          font-weight: 800;
+        }
+
+        .docs-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 5px 8px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .docs-badge-first {
+          color: #ffd1d8;
+          background: rgba(232, 66, 90, 0.12);
+        }
+
+        .docs-badge-third {
+          color: #c6d6ff;
+          background: rgba(59, 130, 246, 0.12);
+        }
+
+        .docs-app-card ul {
+          margin: 10px 0 0;
+          padding-left: 18px;
+          color: #aab3c4;
+          font-size: 12px;
+          line-height: 1.75;
+        }
+
+        .docs-files-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+          margin-top: 18px;
+        }
+
+        .docs-file-card {
+          display: flex;
+          gap: 14px;
+          align-items: flex-start;
+        }
+
+        .docs-file-icon {
+          flex-shrink: 0;
+          width: 38px;
+          height: 38px;
+          border-radius: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #fff;
+          background: linear-gradient(135deg, rgba(232, 66, 90, 0.94), rgba(243, 113, 134, 0.9));
+        }
+
+        .docs-file-card code {
+          display: inline-block;
+          margin-bottom: 6px;
+          color: #ffd1d8;
+          font-family: ui-monospace, SFMono-Regular, SF Mono, Consolas, monospace;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .docs-file-card p {
+          margin: 0;
+          color: #aab3c4;
+          font-size: 12px;
+          line-height: 1.7;
+        }
+
+        @keyframes docsRise {
+          from {
+            opacity: 0;
+            transform: translateY(18px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes docsFloat {
+          0%, 100% {
+            transform: translate3d(0, 0, 0) scale(1);
+          }
+          50% {
+            transform: translate3d(0, -18px, 0) scale(1.04);
+          }
+        }
+
+        @media (max-width: 1180px) {
+          .docs-layout {
+            grid-template-columns: 1fr;
+          }
+
+          .docs-sidebar {
+            position: relative;
+            top: 0;
+            height: auto;
+            border-right: none;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          }
+
+          .docs-main {
+            padding-top: 18px;
+          }
+        }
+
+        @media (max-width: 900px) {
+          .docs-hero,
+          .docs-grid-2,
+          .docs-grid-4,
+          .docs-files-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .docs-topbar-inner {
+            padding: 14px 18px;
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .docs-main {
+            padding: 18px 18px 80px;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .docs-sidebar {
+            padding-inline: 12px;
+          }
+
+          .docs-panel,
+          .docs-step-card,
+          .docs-file-card,
+          .docs-env-card,
+          .docs-mistake-card,
+          .docs-app-card {
+            padding: 16px;
+            border-radius: 20px;
+          }
+
+          .docs-code-body {
+            font-size: 12px;
+          }
+
+          .docs-table th,
+          .docs-table td {
+            padding-inline: 12px;
+          }
         }
       `}</style>
 
-      {/* Nav */}
-      <nav className="docs-nav">
-        <div className="docs-nav-inner">
-          <Link to="/" className="docs-logo">
+      <div className="docs-orb docs-orb-a" />
+      <div className="docs-orb docs-orb-b" />
+
+      <nav className="docs-topbar">
+        <div className="docs-topbar-inner">
+          <Link to="/" className="docs-brand">
             <img src="https://www.zuup.dev/lovable-uploads/b44b8051-6117-4b37-999d-014c4c33dd13.png" alt="Zuup" />
-            <span className="docs-logo-t">Zuup</span>
-            <span className="docs-logo-a">Auth</span>
-            <span style={{ fontSize: 12, color: "#4b5563", marginLeft: 4 }}>/ Docs</span>
+            <span className="docs-brand-mark">
+              <span className="docs-brand-name">Zuup Auth</span>
+              <span className="docs-brand-sub">OAuth 2.1 + PKCE docs</span>
+            </span>
           </Link>
-          <div className="docs-nav-right">
+
+          <div className="docs-topbar-links">
             <Link to="/">Home</Link>
             <Link to="/profile">Dashboard</Link>
-            <Link to="/signup" className="docs-btn">
-              Get Started <ArrowRight size={13} />
+            <a href="https://auth.zuup.dev/signup" target="_blank" rel="noreferrer">
+              Register App <ExternalLink size={12} style={{ display: "inline", marginLeft: 4 }} />
+            </a>
+            <Link to="/signup" className="docs-button">
+              Get Started <ArrowRight size={14} />
             </Link>
           </div>
         </div>
       </nav>
 
-      <div className="docs-body">
-        {/* Sidebar */}
+      <div className="docs-layout">
         <aside className="docs-sidebar">
-          <div className="docs-sidebar-label">Documentation</div>
-          {SECTIONS.map((s) => (
-            <div
-              key={s.id}
-              className={`docs-sidebar-link ${activeSection === s.id ? "active" : ""}`}
-              onClick={() => scrollTo(s.id)}
+          <p className="docs-sidebar-label">Documentation</p>
+          {SECTIONS.map((section) => (
+            <button
+              key={section.id}
+              className={`docs-sidebar-link ${activeSection === section.id ? "active" : ""}`}
+              onClick={() => scrollTo(section.id)}
             >
-              {s.label}
-            </div>
+              <span>{section.label}</span>
+              <ChevronRight size={14} style={{ opacity: 0.6 }} />
+            </button>
           ))}
-          <div style={{ margin: "20px 20px 8px", height: "1px", background: "rgba(255,255,255,0.06)" }} />
-          <div className="docs-sidebar-label" style={{ marginTop: 16 }}>Resources</div>
-          <a href="https://www.zuup.dev" target="_blank" rel="noopener noreferrer" className="docs-sidebar-link">
-            Zuup Platform <ExternalLink size={11} style={{ display: "inline", marginLeft: 4 }} />
+
+          <div className="docs-sidebar-divider" />
+
+          <p className="docs-sidebar-label">Resources</p>
+          <Link to="/profile" className="docs-sidebar-link">
+            <span>Dashboard</span>
+            <Shield size={14} style={{ opacity: 0.7 }} />
+          </Link>
+          <a href="https://www.zuup.dev" target="_blank" rel="noreferrer" className="docs-sidebar-link">
+            <span>Zuup Platform</span>
+            <ExternalLink size={14} style={{ opacity: 0.7 }} />
           </a>
-          <Link to="/profile" className="docs-sidebar-link">Your Dashboard</Link>
         </aside>
 
-        {/* Content */}
-        <main className="docs-content">
+        <main className="docs-main">
+          <section id="overview" className="docs-section" style={{ animationDelay: "0ms" }}>
+            <div className="docs-hero">
+              <div className="docs-panel">
+                <div className="docs-hero-kicker">
+                  <Zap size={14} /> Zuup Auth Integration Guide
+                </div>
+                <h1 className="docs-hero-title">
+                  <span>OAuth 2.1 + PKCE, with the server holding the secret.</span>
+                </h1>
+                <p className="docs-hero-lead">
+                  This guide follows the actual code in this repo. The browser starts login, Zuup validates the request and shows consent when needed, and the server handles code exchange,
+                  profile lookup, and session hydration.
+                </p>
 
-          {/* Overview */}
-          <section className="docs-section" id="overview">
-            <div className="docs-section-tag">Introduction</div>
-            <h1 className="docs-h2">Zuup Auth</h1>
-            <p className="docs-lead">
-              Zuup Auth is a centralized identity provider for all Zuup services. It implements OAuth 2.1 with mandatory PKCE and OpenID Connect, giving your app secure access to Zuup user accounts.
-            </p>
-            <Alert type="info">
-              <strong style={{ color: "#60a5fa" }}>OAuth 2.1 only.</strong> Zuup Auth does not support the implicit flow or password grant. All integrations must use the authorization code flow with PKCE.
-            </Alert>
-            <h3 className="docs-h3">Base URL</h3>
-            <CodeBlock lang="text" code="https://auth.zuup.dev" />
-            <h3 className="docs-h3">How first-party apps work</h3>
-            <p className="docs-p">
-              Apps with a <span className="ic">zuup.dev</span> domain are automatically treated as first-party. They skip the OAuth consent screen — users are redirected back to the app immediately after signing in. Third-party apps always show a full consent screen listing requested scopes.
-            </p>
+                <div className="docs-chip-row">
+                  <span className="docs-chip docs-chip-accent"><Fingerprint size={13} /> PKCE required</span>
+                  <span className="docs-chip"><Shield size={13} /> First-party apps skip consent</span>
+                  <span className="docs-chip"><Lock size={13} /> Secrets stay server-side</span>
+                  <span className="docs-chip"><Terminal size={13} /> Demo endpoints are in this repo</span>
+                </div>
+
+                <div className="docs-hero-actions">
+                  <Link to="/signup" className="docs-button">
+                    Open signup flow <ArrowRight size={14} />
+                  </Link>
+                  <Link to="/profile" className="docs-secondary-button">
+                    View dashboard <ExternalLink size={14} />
+                  </Link>
+                </div>
+              </div>
+
+              <div className="docs-panel docs-panel-stack">
+                <div className="docs-mini-card">
+                  <div className="docs-mini-card-title">
+                    <Globe size={14} /> What Zuup Auth gives you
+                  </div>
+                  <p>Hosted login at <InlineCode>https://auth.zuup.dev</InlineCode>, OAuth 2.1 authorization code flow with mandatory PKCE, and optional OIDC profile data via scope selection.</p>
+                </div>
+                <div className="docs-stat-grid">
+                  <div className="docs-stat-card">
+                    <div className="docs-stat-top"><Key size={14} /> Hosted authorize endpoint</div>
+                    <p className="docs-stat-desc">Use the Zuup-hosted login page instead of building your own auth UI.</p>
+                  </div>
+                  <div className="docs-stat-card">
+                    <div className="docs-stat-top"><Shield size={14} /> Consent behavior</div>
+                    <p className="docs-stat-desc">`.zuup.dev` apps can skip consent; third-party apps show the consent screen.</p>
+                  </div>
+                  <div className="docs-stat-card">
+                    <div className="docs-stat-top"><Code2 size={14} /> Server exchange</div>
+                    <p className="docs-stat-desc">The token endpoint mints tokens after PKCE verification and profile lookup.</p>
+                  </div>
+                  <div className="docs-stat-card">
+                    <div className="docs-stat-top"><Lock size={14} /> Session persistence</div>
+                    <p className="docs-stat-desc">This repo uses Supabase auth session persistence with <InlineCode>storageKey: "zuup.auth.session"</InlineCode>.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </section>
 
-          <section className="docs-section" id="zuup-apps">
-            <div className="docs-section-tag">Ecosystem</div>
-            <h2 className="docs-h2">Official Zuup Apps</h2>
-            <p className="docs-lead">These first-party apps are already aligned with Zuup Auth and can be used as integration references.</p>
-            <table className="docs-table">
-              <thead>
-                <tr>
-                  <th>App URL</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {FIRST_PARTY_APPS.map((appUrl) => (
-                  <tr key={appUrl}>
-                    <td>{appUrl}</td>
-                    <td style={{ fontSize: 13 }}>Use this domain in your registered redirect URI allowlist if your callback lives here.</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-
-          {/* Quickstart */}
-          <section className="docs-section" id="quickstart">
-            <div className="docs-section-tag">Getting started</div>
-            <h2 className="docs-h2">Quickstart</h2>
-            <p className="docs-lead">Add "Login with Zuup" to your app in four steps.</p>
-            <div className="docs-register-steps">
-              {[
-                { n: "1", title: "Create an account & register your app", body: <>Sign up at <Link to="/signup" style={{ color: "#e8425a" }}>auth.zuup.dev/signup</Link>, go to your <strong>Profile → Apps</strong> tab, and register your application. You'll get a <span className="ic">client_id</span> and a <span className="ic">client_secret</span> (shown once — store it safely).</> },
-                { n: "2", title: "Generate PKCE credentials", body: <>Before each login, generate a random <span className="ic">code_verifier</span> and compute its SHA-256 hash as the <span className="ic">code_challenge</span>. See the PKCE section below for exact code.</> },
-                { n: "3", title: "Redirect to /authorize", body: <>Send the user to <span className="ic">/authorize</span> with your <span className="ic">client_id</span>, <span className="ic">redirect_uri</span>, requested <span className="ic">scope</span>, and PKCE parameters. Zuup handles auth and redirects back with a short-lived <span className="ic">code</span>.</> },
-                { n: "4", title: "Exchange the code for tokens", body: <>On your server, POST to <span className="ic">/token</span> with the code, your <span className="ic">client_secret</span>, and the <span className="ic">code_verifier</span>. You receive <span className="ic">access_token</span> and optionally <span className="ic">refresh_token</span>.</> },
-              ].map((s) => (
-                <div className="docs-register-step" key={s.n}>
-                  <div className="docs-step-num">{s.n}</div>
-                  <div><div className="docs-step-title">{s.title}</div><div className="docs-step-body">{s.body}</div></div>
+          <Section
+            id="quickstart"
+            eyebrow="Getting started"
+            title="Quick Start"
+            lead="Follow this sequence if you want the shortest path from registration to a working login flow."
+            delay={80}
+          >
+            <div className="docs-grid-2">
+              {QUICK_STEPS.map((step, index) => (
+                <div className="docs-step-card" key={step.title}>
+                  <div className="docs-step-index">{index + 1}</div>
+                  <h3 className="docs-card-title">{step.title}</h3>
+                  <p className="docs-card-body">{step.body}</p>
                 </div>
               ))}
             </div>
-          </section>
 
-          {/* PKCE */}
-          <section className="docs-section" id="pkce">
-            <div className="docs-section-tag">Security</div>
-            <h2 className="docs-h2">PKCE Flow</h2>
-            <p className="docs-lead">Proof Key for Code Exchange (PKCE) prevents authorization code interception attacks. It's required for all Zuup Auth integrations.</p>
-            <Alert type="warning">
-              <strong style={{ color: "#f59e0b" }}>Never skip PKCE.</strong> Requests without a <span className="ic">code_challenge</span> will still work for first-party apps, but are considered insecure. Third-party apps must include PKCE.
-            </Alert>
-            <h3 className="docs-h3">Step 1 — Authorization Request</h3>
-            <CodeBlock lang="text" code={`GET /authorize?
-  client_id=YOUR_CLIENT_ID
-  &redirect_uri=https://yourapp.com/callback
-  &response_type=code
-  &scope=openid%20profile%20email
-  &state=RANDOM_STATE_VALUE
-  &code_challenge=BASE64URL(SHA256(code_verifier))
-  &code_challenge_method=S256`} />
-            <h3 className="docs-h3">Step 2 — Callback (receive code)</h3>
-            <CodeBlock lang="text" code={`GET https://yourapp.com/callback?
-  code=AUTH_CODE_HERE
-  &state=RANDOM_STATE_VALUE`} />
-            <h3 className="docs-h3">Step 3 — Token Exchange</h3>
-            <CodeBlock lang="text" code={`POST /token
-Content-Type: application/x-www-form-urlencoded
-
-grant_type=authorization_code
-&client_id=YOUR_CLIENT_ID
-&client_secret=YOUR_CLIENT_SECRET
-&code=AUTH_CODE_HERE
-&redirect_uri=https://yourapp.com/callback
-&code_verifier=ORIGINAL_VERIFIER`} />
-            <h3 className="docs-h3">Token Response</h3>
-            <CodeBlock lang="json" code={`{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "Bearer",
-  "expires_in": 3600,
-  "refresh_token": "zuup_rt_...",
-  "scope": "openid profile email"
-}`} />
-          </section>
-
-          {/* Scopes */}
-          <section className="docs-section" id="scopes">
-            <div className="docs-section-tag">Authorization</div>
-            <h2 className="docs-h2">Scopes</h2>
-            <p className="docs-lead">Scopes define what your app can access. Request only what you need — users see every requested scope on the consent screen.</p>
-            <table className="docs-table">
-              <thead>
-                <tr>
-                  <th>Scope</th>
-                  <th>Description</th>
-                  <th style={{ width: 90 }}>Default</th>
-                </tr>
-              </thead>
-              <tbody>
-                {SCOPES.map((s) => (
-                  <tr key={s.scope}>
-                    <td>{s.scope}</td>
-                    <td style={{ fontSize: 13 }}>{s.desc}</td>
-                    <td>{s.required && <span className="scope-req">required</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
             <Alert type="info">
-              Request scopes as a space-separated string: <span className="ic">scope=openid profile email</span>
+              If your site is not on a <InlineCode>zuup.dev</InlineCode> domain, users will see the consent screen before the browser returns to your app.
             </Alert>
-          </section>
+          </Section>
 
-          {/* Endpoints */}
-          <section className="docs-section" id="endpoints">
-            <div className="docs-section-tag">Reference</div>
-            <h2 className="docs-h2">Endpoints</h2>
-            <table className="docs-ep-table">
-              <tbody>
-                {ENDPOINTS.map((ep) => (
-                  <tr key={ep.path}>
-                    <td><span className={`method-badge ${ep.method === "GET" ? "method-get" : "method-post"}`}>{ep.method}</span></td>
-                    <td style={{ fontFamily: "monospace", fontSize: 12, color: "#e8eaf0" }}>{ep.path}</td>
-                    <td>{ep.desc}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <h3 className="docs-h3">OIDC Discovery</h3>
-            <p className="docs-p">The OpenID Connect discovery document is available at <span className="ic">/.well-known/openid-configuration</span> and contains all endpoint URLs, supported scopes, and signing key information.</p>
-          </section>
-
-          <section className="docs-section" id="profile-fields">
-            <div className="docs-section-tag">Account Data</div>
-            <h2 className="docs-h2">Profile Metadata Contract</h2>
-            <p className="docs-lead">Profile data is written into Supabase Auth user metadata and read from the same source. No separate global profile table is required.</p>
-            <table className="docs-table">
-              <thead>
-                <tr>
-                  <th>Metadata key</th>
-                  <th>Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {PROFILE_FIELDS.map((field) => (
-                  <tr key={field.key}>
-                    <td>{field.key}</td>
-                    <td style={{ fontSize: 13 }}>{field.desc}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Alert type="info">
-              Email updates are handled through the Auth user email update flow. Users must confirm new email addresses from their inbox before the change becomes active.
-            </Alert>
-          </section>
-
-          {/* Register */}
-          <section className="docs-section" id="register">
-            <div className="docs-section-tag">Setup</div>
-            <h2 className="docs-h2">Register an App</h2>
-            <p className="docs-lead">Apps must be registered before they can request OAuth authorization.</p>
-            <div className="docs-register-steps">
-              <div className="docs-register-step">
-                <div className="docs-step-num">1</div>
-                <div>
-                  <div className="docs-step-title">Go to Profile → Apps → Add App</div>
-                  <div className="docs-step-body">
-                    Sign in to your Zuup Auth account and navigate to the Apps tab in your profile. Click "Add App" to open the registration dialog.
-                  </div>
-                </div>
+          <Section
+            id="register"
+            eyebrow="Registration"
+            title="Register the App"
+            lead="Use a real callback page and register every production and preview domain you plan to ship."
+            delay={160}
+          >
+            <div className="docs-grid-2">
+              <div className="docs-env-card">
+                <h3 className="docs-card-title">Where to register</h3>
+                <p className="docs-card-body">
+                  Register through the Zuup Auth signup flow at <InlineCode>auth.zuup.dev/signup</InlineCode> or the local app's signup route. Use the exact callback URL your app will
+                  receive after login.
+                </p>
               </div>
-              <div className="docs-register-step">
-                <div className="docs-step-num">2</div>
-                <div>
-                  <div className="docs-step-title">Fill in app details</div>
-                  <div className="docs-step-body">
-                    Provide your app name, homepage URL, and the redirect URI(s) that Zuup will send authorization codes to. Apps with a <span className="ic">zuup.dev</span> domain are automatically first-party.
-                  </div>
-                </div>
-              </div>
-              <div className="docs-register-step">
-                <div className="docs-step-num">3</div>
-                <div>
-                  <div className="docs-step-title">Save your credentials</div>
-                  <div className="docs-step-body">
-                    You'll receive a <span className="ic">client_id</span> and a <span className="ic">client_secret</span>. The secret is shown exactly once — copy it to a secure secret manager (e.g. Vercel env vars, AWS Secrets Manager). Never put it in client-side code.
-                  </div>
-                </div>
+              <div className="docs-env-card">
+                <h3 className="docs-card-title">Callback routes in this repo</h3>
+                <p className="docs-card-body">
+                  The guide is written to match real callback patterns such as <InlineCode>/callback</InlineCode> and <InlineCode>/auth/zuup/callback</InlineCode>. Pick one and keep it
+                  consistent in your app registration and runtime code.
+                </p>
               </div>
             </div>
-            <Alert type="warning">
-              Apps registered through the UI are stored locally for demo purposes. In production, app registrations are stored in the Zuup Auth database and require admin approval for <span className="ic">zuup:admin</span> scope.
-            </Alert>
-          </section>
 
-          {/* Examples */}
-          <section className="docs-section" id="examples">
-            <div className="docs-section-tag">Code</div>
-            <h2 className="docs-h2">Code Examples</h2>
-            <p className="docs-lead">Full integration examples for common frameworks.</p>
+            <div className="docs-grid-4">
+              {APP_EXAMPLES.map((app) => (
+                <div className="docs-app-card" key={app.clientId}>
+                  <div className="docs-app-title">
+                    <h4>{app.name}</h4>
+                    <span className={`docs-badge ${app.firstParty ? "docs-badge-first" : "docs-badge-third"}`}>
+                      {app.firstParty ? "First-party" : "Third-party"}
+                    </span>
+                  </div>
+                  <p className="docs-card-body" style={{ marginBottom: 10 }}>
+                    Client ID: <InlineCode>{app.clientId}</InlineCode>
+                  </p>
+                  <p className="docs-card-body" style={{ marginBottom: 8 }}>
+                    Redirects:
+                  </p>
+                  <ul>
+                    {app.redirects.slice(0, 3).map((redirect) => (
+                      <li key={redirect}>{redirect}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+
+            <Alert type="warning">
+              If you are shipping a custom app, only request scopes that were actually registered for that client. The authorization validator rejects mismatched scopes and redirect URIs.
+            </Alert>
+          </Section>
+
+          <Section
+            id="environment"
+            eyebrow="Configuration"
+            title="Environment Variables"
+            lead="Split values by where they are used. Browser-facing values need the `VITE_` prefix; secrets never should."
+            delay={240}
+          >
+            <div className="docs-grid-2">
+              <div className="docs-env-card">
+                <h3 className="docs-card-title">Client-side variables</h3>
+                <p className="docs-card-body">These are readable by browser code and should only contain public values.</p>
+                <ul>
+                  {CLIENT_VARS.map((value) => (
+                    <li key={value}>{value}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="docs-env-card">
+                <h3 className="docs-card-title">Server-side variables</h3>
+                <p className="docs-card-body">Keep these in server-only env vars or Vercel server settings.</p>
+                <ul>
+                  {SERVER_VARS.map((value) => (
+                    <li key={value}>{value}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <Alert type="info">
+              In this repo, the token and userinfo endpoints also accept <InlineCode>ZUUP_OAUTH_SIGNING_SECRET</InlineCode> as the preferred signing secret fallback.
+            </Alert>
+          </Section>
+
+          <Section
+            id="frontend"
+            eyebrow="Browser flow"
+            title="Start Login from the Frontend"
+            lead="Generate PKCE in the browser, store the verifier in session storage, and redirect to Zuup with the full authorization request."
+            delay={320}
+          >
+            <div className="docs-grid-2">
+              <div className="docs-mini-card">
+                <div className="docs-mini-card-title"><Fingerprint size={14} /> Required query parameters</div>
+                <p>client_id, redirect_uri, response_type=code, scope, state, code_challenge, and code_challenge_method=S256.</p>
+              </div>
+              <div className="docs-mini-card">
+                <div className="docs-mini-card-title"><Info size={14} /> Repo reference</div>
+                <p>The auth request validation happens before consent in <InlineCode>src/pages/Authorize.tsx</InlineCode> using <InlineCode>api/oauth/validate-request.js</InlineCode>.</p>
+              </div>
+            </div>
+
             <div className="docs-tabs">
-              {Object.keys(EXAMPLES).map((k) => (
-                <button key={k} className={`docs-tab ${activeExample === k ? "active" : ""}`} onClick={() => setActiveExample(k)}>
-                  {k}
+              {Object.entries(EXAMPLES).map(([key, example]) => (
+                <button
+                  key={key}
+                  className={`docs-tab ${activeExample === key ? "active" : ""}`}
+                  onClick={() => setActiveExample(key as keyof typeof EXAMPLES)}
+                >
+                  {example.label}
                 </button>
               ))}
             </div>
-            <CodeBlock lang={EXAMPLES[activeExample].lang} code={EXAMPLES[activeExample].code} />
-          </section>
 
-          {/* Errors */}
-          <section className="docs-section" id="errors">
-            <div className="docs-section-tag">Reference</div>
-            <h2 className="docs-h2">Error Reference</h2>
-            <p className="docs-lead">OAuth errors are returned as query parameters on your redirect_uri, or as JSON from the token endpoint.</p>
-            <table className="docs-table">
-              <thead>
-                <tr>
-                  <th>Error code</th>
-                  <th>Meaning</th>
-                  <th>How to fix</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ERRORS.map((e) => (
-                  <tr key={e.code}>
-                    <td>{e.code}</td>
-                    <td>{e.desc}</td>
-                    <td style={{ color: "#6b7280" }}>{e.fix}</td>
+            <CodeBlock code={EXAMPLES[activeExample].code} lang={EXAMPLES[activeExample].lang} />
+          </Section>
+
+          <Section
+            id="callback"
+            eyebrow="Callback path"
+            title="Handle the Callback and Exchange the Code"
+            lead="Your callback page should do three things: verify state, confirm the PKCE verifier exists, and send the authorization code to your backend."
+            delay={400}
+          >
+            <div className="docs-grid-2">
+              <div className="docs-step-card">
+                <div className="docs-step-index">1</div>
+                <h3 className="docs-card-title">Check state</h3>
+                <p className="docs-card-body">Reject the callback if the returned state does not match the one saved before redirect.</p>
+              </div>
+              <div className="docs-step-card">
+                <div className="docs-step-index">2</div>
+                <h3 className="docs-card-title">Verify the PKCE verifier</h3>
+                <p className="docs-card-body">The browser must still have the original verifier available when the callback runs.</p>
+              </div>
+              <div className="docs-step-card">
+                <div className="docs-step-index">3</div>
+                <h3 className="docs-card-title">Exchange on the server</h3>
+                <p className="docs-card-body">Post the code and verifier to your backend or to the app's token exchange endpoint.</p>
+              </div>
+              <div className="docs-step-card">
+                <div className="docs-step-index">4</div>
+                <h3 className="docs-card-title">Fetch userinfo</h3>
+                <p className="docs-card-body">Use the returned access token to fetch the profile and hydrate your local session.</p>
+              </div>
+            </div>
+
+            <CodeBlock code={EXAMPLES.server.code} lang={EXAMPLES.server.lang} />
+
+            <Alert type="warning">
+              Do not put <InlineCode>client_secret</InlineCode> in browser code. The server-side token exchange in this repo is handled by <InlineCode>api/oauth/token.js</InlineCode>.
+            </Alert>
+          </Section>
+
+          <Section
+            id="session"
+            eyebrow="Persistence"
+            title="Persist the Session"
+            lead="This repo relies on Supabase auth session persistence and auth-state listeners to keep the app synced with the current user."
+            delay={480}
+          >
+            <div className="docs-grid-2">
+              <div className="docs-mini-card">
+                <div className="docs-mini-card-title"><Lock size={14} /> Session storage</div>
+                <p>Supabase auth is configured with persistence, auto-refresh, PKCE flow, and the storage key <InlineCode>zuup.auth.session</InlineCode>.</p>
+              </div>
+              <div className="docs-mini-card">
+                <div className="docs-mini-card-title"><Shield size={14} /> Auth hydration</div>
+                <p>The <InlineCode>useAuth</InlineCode> hook subscribes to auth-state changes and refreshes the session on visibility changes.</p>
+              </div>
+            </div>
+
+            <Alert type="info">
+              The app already keeps session state in sync through Supabase auth. Your external integration should store tokens in a secure location, not in ad hoc local storage.
+            </Alert>
+          </Section>
+
+          <Section
+            id="scopes"
+            eyebrow="Authorization"
+            title="Scopes"
+            lead="Request the smallest scope set that satisfies the feature you are building. More scopes mean more consent friction."
+            delay={560}
+          >
+            <div className="docs-table-wrap">
+              <table className="docs-table">
+                <thead>
+                  <tr>
+                    <th>Scope</th>
+                    <th>Required</th>
+                    <th>Description</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+                </thead>
+                <tbody>
+                  {SCOPES.map((scope) => (
+                    <tr key={scope.scope}>
+                      <td>
+                        <InlineCode>{scope.scope}</InlineCode>
+                      </td>
+                      <td>{scope.required ? "Yes" : "No"}</td>
+                      <td>{scope.desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
+            <Alert type="info">
+              The recommended default request is <InlineCode>openid profile email</InlineCode>. Add <InlineCode>offline_access</InlineCode> only if you need refresh tokens.
+            </Alert>
+          </Section>
+
+          <Section
+            id="endpoints"
+            eyebrow="Reference"
+            title="Endpoints"
+            lead="These are the real endpoints used by the app and the server handlers in this repository."
+            delay={640}
+          >
+            <div className="docs-table-wrap">
+              <table className="docs-table">
+                <thead>
+                  <tr>
+                    <th>Method</th>
+                    <th>Endpoint</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ENDPOINTS.map((endpoint) => (
+                    <tr key={endpoint.path}>
+                      <td>
+                        <span className={`docs-method ${endpoint.method === "GET" ? "docs-method-get" : "docs-method-post"}`}>
+                          {endpoint.method}
+                        </span>
+                      </td>
+                      <td>
+                        <InlineCode>{endpoint.path}</InlineCode>
+                      </td>
+                      <td>{endpoint.desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="docs-grid-2">
+              <div className="docs-env-card">
+                <h3 className="docs-card-title">Hosted login</h3>
+                <p className="docs-card-body">The hosted authorize URL is the public entry point. The local app mirrors the same auth rules in the React UI.</p>
+              </div>
+              <div className="docs-env-card">
+                <h3 className="docs-card-title">Token + userinfo</h3>
+                <p className="docs-card-body">The server exchange issues the access token, and userinfo returns the profile claims that the app hydrates.</p>
+              </div>
+            </div>
+          </Section>
+
+          <Section
+            id="mistakes"
+            eyebrow="Troubleshooting"
+            title="Common Mistakes"
+            lead="Most integration issues come from redirect mismatches or leaking secrets to the browser."
+            delay={720}
+          >
+            <div className="docs-grid-2">
+              {COMMON_MISTAKES.map((mistake) => (
+                <div className="docs-mistake-card" key={mistake}>
+                  <h3 className="docs-card-title">Watch out</h3>
+                  <p className="docs-card-body">{mistake}</p>
+                </div>
+              ))}
+            </div>
+
+            <Alert type="warning">
+              If a client hits <InlineCode>invalid_grant</InlineCode>, check the redirect URI, code age, and PKCE verifier first. The token exchange in this repo rejects mismatches
+              immediately.
+            </Alert>
+          </Section>
+
+          <Section
+            id="repo-map"
+            eyebrow="Repository guide"
+            title="Repo Map"
+            lead="These are the files that matter when you want to follow the implementation or adapt it for another app."
+            delay={800}
+          >
+            <div className="docs-files-grid">
+              {REPO_MAP.map((entry) => (
+                <div className="docs-file-card" key={entry.file}>
+                  <div className="docs-file-icon">
+                    <Code2 size={18} />
+                  </div>
+                  <div>
+                    <code>{entry.file}</code>
+                    <p>{entry.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Alert type="info">
+              The page is intentionally aligned to the implementation in this repository, not a generic OAuth guide. That keeps the docs useful when you are debugging the local demo or
+              porting the same pattern into another site.
+            </Alert>
+          </Section>
         </main>
       </div>
     </div>
