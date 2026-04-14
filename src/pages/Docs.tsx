@@ -19,16 +19,16 @@ import {
 } from "lucide-react";
 
 const SECTIONS = [
-  { id: "overview", label: "Overview" },
-  { id: "quickstart", label: "Quick Start" },
-  { id: "register", label: "Register App" },
-  { id: "environment", label: "Environment" },
-  { id: "frontend", label: "Frontend Login" },
-  { id: "callback", label: "Callback + Exchange" },
+  { id: "overview", label: "Summary" },
+  { id: "quickstart", label: "Flow" },
+  { id: "register", label: "App Registry" },
+  { id: "environment", label: "Env Vars" },
+  { id: "frontend", label: "PKCE Start" },
+  { id: "callback", label: "Callback" },
   { id: "session", label: "Session" },
   { id: "scopes", label: "Scopes" },
   { id: "endpoints", label: "Endpoints" },
-  { id: "mistakes", label: "Common Mistakes" },
+  { id: "mistakes", label: "Failure Modes" },
   { id: "repo-map", label: "Repo Map" },
 ];
 
@@ -73,11 +73,11 @@ const APP_EXAMPLES = [
 
 const QUICK_STEPS = [
   {
-    title: "Register the app",
+    title: "Register the client",
     body: (
       <>
-        Register through the Zuup Auth signup flow. In this repo, the admin/profile flow lives in <span className="docs-inline">/profile</span>, and the app registration entrypoint is
-        available from <Link to="/signup">the signup route</Link>.
+        Register through the Zuup Auth signup flow. In this repo, the app registration UI is reachable from <Link to="/signup">the signup route</Link>, and admin management lives in
+        <span className="docs-inline">/profile</span>.
       </>
     ),
   },
@@ -85,13 +85,13 @@ const QUICK_STEPS = [
     title: "Configure redirects",
     body: (
       <>
-        Use an actual callback page such as <span className="docs-inline">/callback</span> or <span className="docs-inline">/auth/zuup/callback</span>. Do not point the redirect URI at an
-        API route.
+        Use a real callback page such as <span className="docs-inline">/callback</span> or <span className="docs-inline">/auth/zuup/callback</span>. Do not point the redirect URI at an API
+        route.
       </>
     ),
   },
   {
-    title: "Set env vars",
+    title: "Set environment",
     body: (
       <>
         Keep browser-facing values prefixed with <span className="docs-inline">VITE_</span>. Keep <span className="docs-inline">client_secret</span> and service keys only on the server.
@@ -99,7 +99,7 @@ const QUICK_STEPS = [
     ),
   },
   {
-    title: "Start login in the browser",
+    title: "Start PKCE login",
     body: (
       <>
         Generate a PKCE verifier/challenge before redirecting the user to <span className="docs-inline">https://auth.zuup.dev/authorize</span>.
@@ -107,7 +107,7 @@ const QUICK_STEPS = [
     ),
   },
   {
-    title: "Handle the callback",
+    title: "Handle callback",
     body: (
       <>
         Validate <span className="docs-inline">state</span>, confirm the stored PKCE verifier, then send the authorization code to your backend.
@@ -130,7 +130,7 @@ const CLIENT_VARS = [
   "VITE_ZUUP_REDIRECT_URI",
   "VITE_ZUUP_AUTH_URL or VITE_ZUUP_AUTHORIZE_URL",
   "VITE_ZUUP_SCOPE",
-  "VITE_ZUUP_TOKEN_URL or VITE_ZUUP_TOKEN_EXCHANGE_URL when you override the default exchange path",
+  "VITE_ZUUP_TOKEN_URL or VITE_ZUUP_TOKEN_EXCHANGE_URL when you override the exchange path",
 ];
 
 const SERVER_VARS = [
@@ -145,40 +145,40 @@ const SERVER_VARS = [
 ];
 
 const SCOPES = [
-  { scope: "openid", required: true, desc: "Required for OIDC and identity claims." },
-  { scope: "profile", required: false, desc: "Reads the user's display name, username, and avatar." },
-  { scope: "email", required: false, desc: "Reads the user's email address." },
-  { scope: "offline_access", required: false, desc: "Requests a refresh token for longer-lived access." },
-  { scope: "zuup:read", required: false, desc: "Read-only access to Zuup account data and settings." },
+  { scope: "openid", required: true, desc: "Required for identity and OIDC claims." },
+  { scope: "profile", required: false, desc: "Name, username, and avatar." },
+  { scope: "email", required: false, desc: "User email address." },
+  { scope: "offline_access", required: false, desc: "Refresh token access." },
+  { scope: "zuup:read", required: false, desc: "Read-only Zuup account data." },
   { scope: "zuup:write", required: false, desc: "Create and update Zuup account data." },
-  { scope: "zuup:admin", required: false, desc: "Full administrative access. Request only with explicit approval." },
+  { scope: "zuup:admin", required: false, desc: "Admin access. Request only when needed." },
 ];
 
 const ENDPOINTS = [
-  { method: "GET", path: "https://auth.zuup.dev/authorize", desc: "Starts the hosted login and consent flow." },
-  { method: "POST", path: "https://auth.zuup.dev/api/oauth/validate-request", desc: "Validates client_id, redirect_uri, scopes, and PKCE fields before login." },
-  { method: "POST", path: "https://auth.zuup.dev/api/oauth/token", desc: "Exchanges the authorization code for tokens." },
-  { method: "GET", path: "https://auth.zuup.dev/api/oauth/userinfo", desc: "Returns the authenticated profile from the bearer token." },
-  { method: "POST", path: "https://auth.zuup.dev/api/oauth/register-client", desc: "Registers an OAuth client from the admin/profile flow." },
+  { method: "GET", path: "https://auth.zuup.dev/authorize", desc: "Hosted authorize entrypoint." },
+  { method: "POST", path: "https://auth.zuup.dev/api/oauth/validate-request", desc: "Preflight validation before consent." },
+  { method: "POST", path: "https://auth.zuup.dev/api/oauth/token", desc: "Authorization-code exchange." },
+  { method: "GET", path: "https://auth.zuup.dev/api/oauth/userinfo", desc: "Bearer-token profile lookup." },
+  { method: "POST", path: "https://auth.zuup.dev/api/oauth/register-client", desc: "Client registration endpoint." },
 ];
 
 const REPO_MAP = [
-  { file: "src/lib/oauth.ts", desc: "PKCE helpers, client validation, scope rules, code generation, and audit logging." },
-  { file: "src/pages/Authorize.tsx", desc: "Interactive login and consent UI that validates the request before auth." },
-  { file: "src/pages/Token.tsx", desc: "A local token-exchange demo page that renders the API response." },
-  { file: "src/lib/supabase.ts", desc: "Supabase auth client config, session persistence, and OAuth endpoint constants." },
-  { file: "src/hooks/useAuth.ts", desc: "Loads the current session, listens for auth changes, and refreshes on visibility changes." },
-  { file: "api/oauth/token.js", desc: "Server-side token exchange, PKCE verification, JWT minting, and profile lookup." },
-  { file: "api/oauth/userinfo.js", desc: "Bearer-token userinfo endpoint backed by JWT verification." },
-  { file: "api/oauth/validate-request.js", desc: "Request preflight validation before rendering consent." },
+  { file: "src/lib/oauth.ts", desc: "PKCE, client validation, scopes, code issuance, audit logging." },
+  { file: "src/pages/Authorize.tsx", desc: "Login and consent UI." },
+  { file: "src/pages/Token.tsx", desc: "Token exchange demo page." },
+  { file: "src/lib/supabase.ts", desc: "Supabase auth client and endpoint constants." },
+  { file: "src/hooks/useAuth.ts", desc: "Session loading and refresh handling." },
+  { file: "api/oauth/token.js", desc: "Server token exchange and JWT minting." },
+  { file: "api/oauth/userinfo.js", desc: "Bearer-token profile endpoint." },
+  { file: "api/oauth/validate-request.js", desc: "Request validation endpoint." },
 ];
 
 const COMMON_MISTAKES = [
-  "Using an API route as the redirect URI instead of a real callback page.",
-  "Putting the client secret in a browser-visible env var.",
-  "Forgetting to store the PKCE verifier before redirecting the user.",
-  "Mismatching the callback URL between Zuup and your app.",
-  "Requesting scopes that were not registered for the client.",
+  "Using an API route as the redirect URI.",
+  "Putting the client secret in browser-visible env vars.",
+  "Not saving the PKCE verifier before redirect.",
+  "Mismatching callback URLs between Zuup and your app.",
+  "Requesting scopes that the client was never registered for.",
 ];
 
 const EXAMPLES = {
@@ -241,7 +241,10 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
   return (
     <div className="docs-code-wrap">
       <div className="docs-code-bar">
-        <span className="docs-code-lang">{lang}</span>
+        <span className="docs-code-meta">
+          <span className="docs-code-lang">{lang}</span>
+          <span className="docs-code-title">Snippet</span>
+        </span>
         <button
           className="docs-copy-btn"
           onClick={() => {
@@ -856,6 +859,82 @@ export default function Docs() {
           line-height: 1.75;
         }
 
+        .docs-code-wrap {
+          margin-top: 18px;
+          overflow: hidden;
+          border-radius: 22px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(8, 11, 16, 0.96);
+          box-shadow: 0 28px 80px -58px rgba(0, 0, 0, 0.9);
+        }
+
+        .docs-code-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 12px 16px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+        }
+
+        .docs-code-meta {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+          white-space: nowrap;
+        }
+
+        .docs-code-title {
+          color: #dfe7f5;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .docs-code-lang {
+          color: #9aa5ba;
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+        }
+
+        .docs-copy-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 7px 11px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: rgba(255, 255, 255, 0.04);
+          color: #dfe7f5;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: background 140ms ease, transform 140ms ease, border-color 140ms ease;
+        }
+
+        .docs-copy-btn:hover {
+          transform: translateY(-1px);
+          background: rgba(255, 255, 255, 0.08);
+          border-color: rgba(255, 255, 255, 0.16);
+        }
+
+        .docs-code-body {
+          margin: 0;
+          padding: 18px 18px 20px;
+          overflow-x: auto;
+          color: #c6d0e0;
+          font-size: 12.5px;
+          line-height: 1.75;
+          white-space: pre;
+          font-family: ui-monospace, SFMono-Regular, SF Mono, Consolas, monospace;
+        }
+
         .docs-table-wrap {
           margin-top: 18px;
           overflow-x: auto;
@@ -883,6 +962,7 @@ export default function Docs() {
           font-size: 11px;
           text-transform: uppercase;
           letter-spacing: 0.14em;
+          white-space: nowrap;
         }
 
         .docs-table td {
@@ -993,6 +1073,10 @@ export default function Docs() {
           line-height: 1.75;
         }
 
+        .docs-app-card li + li {
+          margin-top: 4px;
+        }
+
         .docs-files-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1094,6 +1178,16 @@ export default function Docs() {
         @media (max-width: 640px) {
           .docs-sidebar {
             padding-inline: 12px;
+          }
+
+          .docs-topbar-links {
+            gap: 10px;
+          }
+
+          .docs-button,
+          .docs-secondary-button {
+            width: 100%;
+            justify-content: center;
           }
 
           .docs-panel,
