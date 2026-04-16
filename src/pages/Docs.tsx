@@ -178,6 +178,7 @@ const COMMON_MISTAKES = [
   "Putting the client secret in browser-visible env vars.",
   "Not saving the PKCE verifier before redirect.",
   "Mismatching callback URLs between Zuup and your app.",
+  "Migrating domains (Vercel to Cloudflare) without updating allowed_redirect_uris.",
   "Requesting scopes that the client was never registered for.",
 ];
 

@@ -67,6 +67,36 @@ function getDbConfig() {
   };
 }
 
+function parseRedirectUris(value) {
+  if (!value) return [];
+  return String(value)
+    .split(/[\n, ]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getEnvClient(clientId) {
+  const envClientId = process.env.ZUUP_CLIENT_ID || "";
+  if (!envClientId || envClientId !== clientId) return null;
+
+  const redirectUris = [
+    ...parseRedirectUris(process.env.ZUUP_ALLOWED_REDIRECT_URIS),
+    ...parseRedirectUris(process.env.ZUUP_REDIRECT_URI),
+  ];
+
+  return {
+    client_id: envClientId,
+    name: process.env.ZUUP_CLIENT_NAME || envClientId,
+    icon_url: process.env.ZUUP_CLIENT_ICON_URL || undefined,
+    homepage_url: process.env.ZUUP_CLIENT_HOMEPAGE_URL || undefined,
+    allowed_redirect_uris: redirectUris,
+    allowed_scopes: parseRedirectUris(process.env.ZUUP_ALLOWED_SCOPES).length
+      ? parseRedirectUris(process.env.ZUUP_ALLOWED_SCOPES)
+      : ["openid", "profile", "email"],
+    is_first_party: String(process.env.ZUUP_CLIENT_IS_FIRST_PARTY || "false").toLowerCase() === "true",
+  };
+}
+
 function normalizeRedirectUri(value) {
   try {
     const url = new URL(value);
@@ -80,6 +110,11 @@ function normalizeRedirectUri(value) {
 export async function findClientById(clientId) {
   if (STATIC_CLIENTS[clientId]) {
     return STATIC_CLIENTS[clientId];
+  }
+
+  const envClient = getEnvClient(clientId);
+  if (envClient) {
+    return envClient;
   }
 
   const cfg = getDbConfig();
@@ -138,7 +173,19 @@ export async function validateAuthRequestPayload(payload) {
   }
 
   const client = await findClientById(clientId);
-  if (!client) return { ok: false, error: `Unknown client_id: ${clientId}` };
+  if (!client) {
+    return {
+      ok: false,
+      error: `Unknown client_id: ${clientId}. If you migrated hosting, verify oauth_clients row exists or set ZUUP_CLIENT_ID + ZUUP_ALLOWED_REDIRECT_URIS on this deployment.`,
+    };
+  }
+
+  if (!Array.isArray(client.allowed_redirect_uris) || client.allowed_redirect_uris.length === 0) {
+    return {
+      ok: false,
+      error: `No allowed_redirect_uris configured for client_id: ${clientId}. Set allowed_redirect_uris in oauth_clients or ZUUP_ALLOWED_REDIRECT_URIS.`,
+    };
+  }
 
   const normalizedIncoming = normalizeRedirectUri(redirectUri);
   const isValidRedirect = client.allowed_redirect_uris.some((registered) => {
@@ -153,7 +200,7 @@ export async function validateAuthRequestPayload(payload) {
   if (!isValidRedirect) {
     return {
       ok: false,
-      error: `redirect_uri not registered for this client. Received: ${redirectUri}. Allowed: ${client.allowed_redirect_uris.join(" | ")}`,
+      error: `redirect_uri not registered for this client. Received: ${redirectUri}. Allowed: ${client.allowed_redirect_uris.join(" | ")}. If you moved from Vercel to Cloudflare, register the new callback URL exactly.`,
     };
   }
 

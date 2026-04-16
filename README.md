@@ -264,7 +264,7 @@ content_path = "./supabase/templates/mfa_factor_unenrolled_notification.html"
 
 Hosted Supabase projects can paste the same HTML into the Dashboard email template editor.
 
-## Environment Variables (Vercel)
+## Environment Variables (Vercel / Cloudflare)
 
 ```env
 ZUUP_ISSUER=https://auth.zuup.dev
@@ -276,9 +276,25 @@ SUPABASE_SERVICE_ROLE_KEY=PUT_SUPABASE_SERVICE_ROLE_KEY_HERE
 ZUUP_OAUTH_CODES_TABLE=oauth_authorization_codes
 ZUUP_OAUTH_CLIENTS_TABLE=oauth_clients
 
+# Optional single-client fallback (useful if oauth_clients table access is not configured)
+ZUUP_CLIENT_ID=YOUR_CLIENT_ID
+ZUUP_ALLOWED_REDIRECT_URIS=https://app.example.com/callback,https://preview.example.com/callback
+ZUUP_REDIRECT_URI=https://app.example.com/callback
+ZUUP_ALLOWED_SCOPES=openid,profile,email,offline_access
+ZUUP_CLIENT_NAME=Your App Name
+ZUUP_CLIENT_HOMEPAGE_URL=https://app.example.com
+ZUUP_CLIENT_ICON_URL=https://app.example.com/icon.png
+ZUUP_CLIENT_IS_FIRST_PARTY=false
+
 RESEND_API_KEY=PUT_RESEND_KEY_HERE
 SECURITY_ALERT_FROM_EMAIL="Zuup Security <security@zuup.dev>"
 ```
+
+If users see `Invalid Request` on `/authorize` after migration, it is usually one of these:
+
+- `client_id` is not found in `oauth_clients` and no `ZUUP_CLIENT_ID` fallback is set.
+- `redirect_uri` changed (for example from `*.vercel.app` to `*.pages.dev`) but was not added to `allowed_redirect_uris`.
+- `SUPABASE_SERVICE_ROLE_KEY` is missing on the new deployment, so OAuth client metadata cannot be read from Supabase.
 
 ## Local Development
 
