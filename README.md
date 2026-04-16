@@ -305,7 +305,7 @@ npm run dev
 
 ## Cloudflare Deployment Note
 
-When deploying to Cloudflare Pages, API routes must exist under the `functions/` directory (for example: `functions/api/oauth/validate-request.js`).
+When deploying to Cloudflare Pages, API routes must exist under the `functions/` directory (for example: `functions/api/oauth/validate-request.js` and `functions/api/oauth/issue-code.js`).
 
 The `api/` directory in this repo is Vercel-oriented. If a route exists only in `api/` and not in `functions/`, Cloudflare can return `405 Method Not Allowed` for POST requests.
 
