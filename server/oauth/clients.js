@@ -1,5 +1,15 @@
 const DEFAULT_SUPABASE_URL = "https://qnapwukqhybziduhzpow.supabase.co";
 
+function getEnvValue(key, env) {
+  if (env && typeof env === "object" && env[key] != null) {
+    return String(env[key]);
+  }
+  if (typeof process !== "undefined" && process?.env?.[key] != null) {
+    return process.env[key];
+  }
+  return "";
+}
+
 const STATIC_CLIENTS = {
   "0d810775-7d53-4c4d-b44e-2a39f7fb1741": {
     client_id: "0d810775-7d53-4c4d-b44e-2a39f7fb1741",
@@ -59,11 +69,11 @@ const STATIC_CLIENTS = {
   },
 };
 
-function getDbConfig() {
+function getDbConfig(env) {
   return {
-    url: (process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/+$/, ""),
-    key: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-    table: process.env.ZUUP_OAUTH_CLIENTS_TABLE || "oauth_clients",
+    url: (getEnvValue("SUPABASE_URL", env) || DEFAULT_SUPABASE_URL).replace(/\/+$/, ""),
+    key: getEnvValue("SUPABASE_SERVICE_ROLE_KEY", env),
+    table: getEnvValue("ZUUP_OAUTH_CLIENTS_TABLE", env) || "oauth_clients",
   };
 }
 
@@ -75,25 +85,25 @@ function parseRedirectUris(value) {
     .filter(Boolean);
 }
 
-function getEnvClient(clientId) {
-  const envClientId = process.env.ZUUP_CLIENT_ID || "";
+function getEnvClient(clientId, env) {
+  const envClientId = getEnvValue("ZUUP_CLIENT_ID", env);
   if (!envClientId || envClientId !== clientId) return null;
 
   const redirectUris = [
-    ...parseRedirectUris(process.env.ZUUP_ALLOWED_REDIRECT_URIS),
-    ...parseRedirectUris(process.env.ZUUP_REDIRECT_URI),
+    ...parseRedirectUris(getEnvValue("ZUUP_ALLOWED_REDIRECT_URIS", env)),
+    ...parseRedirectUris(getEnvValue("ZUUP_REDIRECT_URI", env)),
   ];
 
   return {
     client_id: envClientId,
-    name: process.env.ZUUP_CLIENT_NAME || envClientId,
-    icon_url: process.env.ZUUP_CLIENT_ICON_URL || undefined,
-    homepage_url: process.env.ZUUP_CLIENT_HOMEPAGE_URL || undefined,
+    name: getEnvValue("ZUUP_CLIENT_NAME", env) || envClientId,
+    icon_url: getEnvValue("ZUUP_CLIENT_ICON_URL", env) || undefined,
+    homepage_url: getEnvValue("ZUUP_CLIENT_HOMEPAGE_URL", env) || undefined,
     allowed_redirect_uris: redirectUris,
-    allowed_scopes: parseRedirectUris(process.env.ZUUP_ALLOWED_SCOPES).length
-      ? parseRedirectUris(process.env.ZUUP_ALLOWED_SCOPES)
+    allowed_scopes: parseRedirectUris(getEnvValue("ZUUP_ALLOWED_SCOPES", env)).length
+      ? parseRedirectUris(getEnvValue("ZUUP_ALLOWED_SCOPES", env))
       : ["openid", "profile", "email"],
-    is_first_party: String(process.env.ZUUP_CLIENT_IS_FIRST_PARTY || "false").toLowerCase() === "true",
+    is_first_party: String(getEnvValue("ZUUP_CLIENT_IS_FIRST_PARTY", env) || "false").toLowerCase() === "true",
   };
 }
 
@@ -107,17 +117,17 @@ function normalizeRedirectUri(value) {
   }
 }
 
-export async function findClientById(clientId) {
+export async function findClientById(clientId, env) {
   if (STATIC_CLIENTS[clientId]) {
     return STATIC_CLIENTS[clientId];
   }
 
-  const envClient = getEnvClient(clientId);
+  const envClient = getEnvClient(clientId, env);
   if (envClient) {
     return envClient;
   }
 
-  const cfg = getDbConfig();
+  const cfg = getDbConfig(env);
   if (!cfg.key) return null;
 
   const query = new URLSearchParams({
@@ -150,7 +160,7 @@ export async function findClientById(clientId) {
   };
 }
 
-export async function validateAuthRequestPayload(payload) {
+export async function validateAuthRequestPayload(payload, env) {
   const clientId = payload.client_id || payload.clientId || "";
   const redirectUri = payload.redirect_uri || payload.redirectUri || "";
   const scope = payload.scope || "openid profile email";
@@ -172,7 +182,7 @@ export async function validateAuthRequestPayload(payload) {
     return { ok: false, error: `Unsupported response_type: ${responseType}. Only 'code' is supported.` };
   }
 
-  const client = await findClientById(clientId);
+  const client = await findClientById(clientId, env);
   if (!client) {
     return {
       ok: false,
